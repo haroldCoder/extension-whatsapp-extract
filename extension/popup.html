@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Message Extractor</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            <path d="M8 10h8"></path>
+            <path d="M8 14h4"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>WA Extractor</h1>
+          <span class="status-indicator" id="wa-connection-status">
+            <span class="status-dot"></span> <span id="wa-status-text">Comprobando...</span>
+          </span>
+        </div>
+      </div>
+      <button class="icon-btn" id="btn-open-wa" title="Abrir WhatsApp Web">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <line x1="10" y1="14" x2="21" y2="3"></line>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Notice if not on WhatsApp -->
+    <div class="wa-alert" id="wa-not-active-alert" style="display: none;">
+      <div class="alert-content">
+        <span>⚠️ WhatsApp Web no está activo en esta pestaña.</span>
+        <button class="btn btn-sm btn-primary" id="btn-go-wa">Ir a WhatsApp Web</button>
+      </div>
+    </div>
+
+    <!-- Active Chat Controls -->
+    <div class="action-grid">
+      <button class="btn btn-primary" id="btn-extract-active">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Listar Chat Actual</span>
+      </button>
+      <button class="btn btn-accent" id="btn-extract-new">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>Listar Nuevos</span>
+      </button>
+    </div>
+
+    <!-- Chat Selection & Stats Bar -->
+    <div class="chat-selector-bar">
+      <div class="selector-wrapper">
+        <label for="select-chat">Conversación:</label>
+        <select id="select-chat" class="select-input">
+          <option value="">Selecciona o captura un chat...</option>
+        </select>
+      </div>
+      <div class="stats-badge" id="stats-badge">0 msgs</div>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="search-filter-section">
+      <div class="search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="search-input" placeholder="Buscar palabras clave...">
+        <button class="clear-search-btn" id="btn-clear-search" style="display:none;">✕</button>
+      </div>
+      <div class="filter-chips">
+        <button class="chip active" data-filter="all">Todos</button>
+        <button class="chip" data-filter="new">Nuevos</button>
+        <button class="chip" data-filter="in">Recibidos</button>
+        <button class="chip" data-filter="out">Enviados</button>
+      </div>
+    </div>
+
+    <!-- Message Feed -->
+    <div class="messages-container" id="messages-container">
+      <div class="empty-feed">
+        <div class="empty-icon">💬</div>
+        <p class="empty-title">Sin mensajes capturados</p>
+        <p class="empty-subtitle">Abre un chat en WhatsApp Web y pulsa <strong>Listar Chat Actual</strong> o pasa el cursor sobre el chat.</p>
+      </div>
+    </div>
+
+    <!-- Export & Footer Actions -->
+    <footer class="popup-footer">
+      <div class="footer-actions">
+        <button class="btn btn-outline" id="btn-copy-all" title="Copiar al portapapeles">
+          <span>📋</span> Copiar
+        </button>
+        <button class="btn btn-outline" id="btn-export-json" title="Descargar en formato JSON">
+          <span>💾</span> JSON
+        </button>
+        <button class="btn btn-outline" id="btn-export-txt" title="Descargar en texto plano">
+          <span>📄</span> TXT
+        </button>
+      </div>
+      <button class="btn-danger-icon" id="btn-delete-chat" title="Eliminar este chat guardado">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      </button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
