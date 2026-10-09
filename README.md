@@ -6,24 +6,29 @@ Extensión de navegador moderna (Google Chrome, Microsoft Edge, Brave, Opera) co
 
 ## ⚡ Características Principales
 
-1. **Acción al pasar el cursor (Hover en chats)**:
+1. **🌐 Extracción Automática de TODOS los Chats de Hoy (Sin seleccionar ningún chat)**:
+   - Con un solo clic en **"🌐 Escanear Todos los Chats de Hoy"**, la extensión escanea de forma autónoma la lista de contactos en WhatsApp Web, detecta todas las conversaciones con actividad del día actual, abre y extrae los mensajes de hoy de cada una, y los agrupa en una vista global unificada.
+   - Cada mensaje incluye la etiqueta con el nombre del contacto remitente.
+
+2. **Acción al pasar el cursor (Hover en chats)**:
    - Al posarte sobre cualquier chat de la lista izquierda de WhatsApp Web, aparecen automáticamente botones rápidos:
      - ⚡ **Nuevos**: Lista únicamente los mensajes nuevos / no leídos.
-     - 📥 **Listar este chat**: Abre la conversación y extrae todos los mensajes visibles.
+     - 📅 **De Hoy**: Lista todos los mensajes intercambiados en el día actual de este chat.
+     - 📥 **Todo**: Abre la conversación y extrae todos los mensajes visibles.
 
-2. **Drawer / Panel flotante dentro de WhatsApp Web**:
+3. **Drawer / Panel flotante dentro de WhatsApp Web**:
    - Botón flotante (*FAB*) integrado directamente en la interfaz de WhatsApp Web con contador de mensajes.
    - Panel lateral desplegable con tema oscuro fiel a WhatsApp.
-   - Buscador por texto en tiempo real.
-   - Filtros rápidos: `Todos`, `Nuevos`, `Recibidos`, `Enviados`.
-   - Copiado individual o masivo al portapapeles.
-   - Modo de **Auto-captura en vivo** (detecta mensajes entrantes en tiempo real mediante `MutationObserver`).
+   - Botón directo: **"🌐 Escanear Todos los Chats de Hoy"** y selector para alternar entre la vista global y el chat actual.
+   - Botones rápidos: **Todos**, **De Hoy** y **Nuevos**.
+   - Buscador por texto en tiempo real y filtros (`Todos`, `De Hoy`, `Nuevos`, `Recibidos`, `Enviados`).
+   - Copiado individual o masivo al portapapeles y exportación a JSON o TXT.
 
-3. **Popup de la Extensión**:
+4. **Popup de la Extensión**:
    - Accesible desde la barra de herramientas del navegador haciendo clic en el icono de la extensión.
-   - Selector entre todos los chats capturados.
-   - Acciones directas para capturar el chat activo o solo los mensajes nuevos.
-   - Exportación de conversaciones a **JSON** y **TXT / CSV**.
+   - Botón superior: **"🌐 Escanear Todos los Chats de Hoy"**.
+   - Selector que incluye la opción principal **"🌟 Todos los chats de hoy (Global)"**.
+   - Exportación global o por chat a **JSON** y **TXT / CSV**.
 
 ---
 

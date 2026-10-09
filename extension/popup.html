@@ -42,15 +42,27 @@
       </div>
     </div>
 
+    <!-- Global Auto-Scan (No chat selection needed!) -->
+    <div class="global-scan-section">
+      <button class="btn btn-global-scan" id="btn-scan-all-today" title="Extraer automáticamente todos los chats de hoy sin seleccionar ninguno">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+        <span>🌐 Escanear Todos los Chats de Hoy</span>
+      </button>
+    </div>
+
     <!-- Active Chat Controls -->
     <div class="action-grid">
-      <button class="btn btn-primary" id="btn-extract-active">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span>Listar Chat Actual</span>
+      <button class="btn btn-primary" id="btn-extract-active" title="Capturar todos los mensajes visibles de este chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Este Chat</span>
       </button>
-      <button class="btn btn-accent" id="btn-extract-new">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span>Listar Nuevos</span>
+      <button class="btn btn-today" id="btn-extract-today" title="Capturar solo mensajes de hoy de este chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span>De Hoy</span>
+      </button>
+      <button class="btn btn-accent" id="btn-extract-new" title="Capturar solo mensajes nuevos de este chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>Nuevos</span>
       </button>
     </div>
 
@@ -74,6 +86,7 @@
       </div>
       <div class="filter-chips">
         <button class="chip active" data-filter="all">Todos</button>
+        <button class="chip" data-filter="today">De Hoy</button>
         <button class="chip" data-filter="new">Nuevos</button>
         <button class="chip" data-filter="in">Recibidos</button>
         <button class="chip" data-filter="out">Enviados</button>

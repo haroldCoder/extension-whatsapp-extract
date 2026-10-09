@@ -14,7 +14,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const alertNotActive = document.getElementById('wa-not-active-alert');
   const btnGoWa = document.getElementById('btn-go-wa');
   const btnOpenWa = document.getElementById('btn-open-wa');
+  const btnScanAllToday = document.getElementById('btn-scan-all-today');
   const btnExtractActive = document.getElementById('btn-extract-active');
+  const btnExtractToday = document.getElementById('btn-extract-today');
   const btnExtractNew = document.getElementById('btn-extract-new');
   const selectChat = document.getElementById('select-chat');
   const statsBadge = document.getElementById('stats-badge');
@@ -82,12 +84,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Helper: Aggregate all today messages across all saved chats and the global collection
+  function getGlobalTodayMessages() {
+    const all = [];
+    const seen = new Set();
+
+    if (savedChats['__TODAY_ALL__']?.messages?.length > 0) {
+      savedChats['__TODAY_ALL__'].messages.forEach(m => {
+        if (!seen.has(m.id)) {
+          seen.add(m.id);
+          all.push({ ...m, isToday: true });
+        }
+      });
+    }
+
+    Object.keys(savedChats).forEach(chatName => {
+      if (chatName === '__TODAY_ALL__') return;
+      const chatMsgs = savedChats[chatName]?.messages || [];
+      chatMsgs.forEach(m => {
+        const ts = (m.timestamp || '').toLowerCase();
+        const isNotYesterday = !ts.includes('ayer') && !ts.includes('yesterday') && !ts.includes('ontem');
+        if ((m.isToday || isNotYesterday) && !seen.has(m.id)) {
+          seen.add(m.id);
+          all.push({ ...m, chatName: m.chatName || chatName, isToday: true });
+        }
+      });
+    });
+
+    return all;
+  }
+
   // Populate Chat Dropdown
   function populateChatDropdown() {
-    const chatNames = Object.keys(savedChats);
     selectChat.innerHTML = '';
+    const chatNames = Object.keys(savedChats);
+    const globalMsgs = getGlobalTodayMessages();
 
-    if (chatNames.length === 0) {
+    // If global today messages exist or __TODAY_ALL__ is in storage, make it first option
+    if (globalMsgs.length > 0 || savedChats['__TODAY_ALL__']) {
+      const opt = document.createElement('option');
+      opt.value = '__TODAY_ALL__';
+      opt.textContent = `🌟 Todos los chats de hoy (${globalMsgs.length})`;
+      if (currentSelectedChat === '__TODAY_ALL__') {
+        opt.selected = true;
+      }
+      selectChat.appendChild(opt);
+    }
+
+    const regularChatNames = chatNames.filter(n => n !== '__TODAY_ALL__');
+
+    if (regularChatNames.length === 0 && globalMsgs.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
       opt.textContent = 'Sin conversaciones guardadas';
@@ -96,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    chatNames.forEach(name => {
+    regularChatNames.forEach(name => {
       const opt = document.createElement('option');
       opt.value = name;
       const count = (savedChats[name]?.messages || []).length;
@@ -107,8 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
       selectChat.appendChild(opt);
     });
 
-    if (!currentSelectedChat || !savedChats[currentSelectedChat]) {
-      currentSelectedChat = chatNames[0];
+    if (!currentSelectedChat || (!savedChats[currentSelectedChat] && currentSelectedChat !== '__TODAY_ALL__')) {
+      currentSelectedChat = globalMsgs.length > 0 ? '__TODAY_ALL__' : (regularChatNames[0] || '');
       selectChat.value = currentSelectedChat;
     }
   }
@@ -118,22 +164,71 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMessages();
   });
 
+  // Global Auto-Scan (All Chats of Today)
+  btnScanAllToday.addEventListener('click', () => {
+    if (!isWhatsAppTab) {
+      alert('Debes estar en la pestaña de WhatsApp Web para escanear.');
+      return;
+    }
+    const origHTML = btnScanAllToday.innerHTML;
+    btnScanAllToday.innerHTML = `<span>⏳</span> <span>Escaneando todos los chats de hoy...</span>`;
+    btnScanAllToday.disabled = true;
+
+    chrome.tabs.sendMessage(activeTabId, { action: 'SCAN_ALL_TODAY_CHATS' }, (res) => {
+      btnScanAllToday.innerHTML = origHTML;
+      btnScanAllToday.disabled = false;
+
+      if (chrome.runtime.lastError) {
+        alert('Error al comunicar con WhatsApp Web. Recarga la página de WhatsApp.');
+      } else if (res && res.success) {
+        currentSelectedChat = '__TODAY_ALL__';
+        activeFilter = 'all';
+        filterChips.forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+        loadStorageData();
+      }
+    });
+  });
+
   // 3. Extract Actions
   btnExtractActive.addEventListener('click', () => {
     if (!isWhatsAppTab) {
       alert('Debes estar en la pestaña de WhatsApp Web para capturar.');
       return;
     }
-    btnExtractActive.innerHTML = `<span>⏳</span> <span>Capturando...</span>`;
+    btnExtractActive.innerHTML = `<span>⏳</span> <span>Cargando...</span>`;
     chrome.tabs.sendMessage(activeTabId, { action: 'EXTRACT_CURRENT_CHAT' }, (res) => {
       btnExtractActive.innerHTML = `
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span>Listar Chat Actual</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Todos</span>
       `;
       if (chrome.runtime.lastError) {
         alert('Error al comunicar con WhatsApp Web. Recarga la página de WhatsApp.');
       } else if (res && res.success) {
         currentSelectedChat = res.chatName;
+        loadStorageData();
+      }
+    });
+  });
+
+  btnExtractToday.addEventListener('click', () => {
+    if (!isWhatsAppTab) {
+      alert('Debes estar en la pestaña de WhatsApp Web para capturar.');
+      return;
+    }
+    btnExtractToday.innerHTML = `<span>⏳</span> <span>Buscando...</span>`;
+    chrome.tabs.sendMessage(activeTabId, { action: 'EXTRACT_TODAY_MESSAGES' }, (res) => {
+      btnExtractToday.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span>De Hoy</span>
+      `;
+      if (chrome.runtime.lastError) {
+        alert('Error al comunicar con WhatsApp Web. Recarga la página de WhatsApp.');
+      } else if (res && res.success) {
+        currentSelectedChat = res.chatName;
+        activeFilter = 'today';
+        filterChips.forEach(c => {
+          c.classList.toggle('active', c.dataset.filter === 'today');
+        });
         loadStorageData();
       }
     });
@@ -147,8 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnExtractNew.innerHTML = `<span>⏳</span> <span>Buscando...</span>`;
     chrome.tabs.sendMessage(activeTabId, { action: 'EXTRACT_NEW_MESSAGES' }, (res) => {
       btnExtractNew.innerHTML = `
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span>Listar Nuevos</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>Nuevos</span>
       `;
       if (chrome.runtime.lastError) {
         alert('Error al comunicar con WhatsApp Web. Recarga la página de WhatsApp.');
@@ -184,16 +279,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 5. Render Messages Feed
   function renderMessages() {
-    const chatData = savedChats[currentSelectedChat];
-    const messages = chatData?.messages || [];
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
     statsBadge.textContent = `${messages.length} msgs`;
 
     if (!messages || messages.length === 0) {
       messagesContainer.innerHTML = `
         <div class="empty-feed">
           <div class="empty-icon">💬</div>
-          <p class="empty-title">Sin mensajes en "${escapeHTML(currentSelectedChat || 'este chat')}"</p>
-          <p class="empty-subtitle">Usa el botón <strong>Listar Chat Actual</strong> o posa sobre el chat en WhatsApp Web.</p>
+          <p class="empty-title">${isGlobal ? 'Sin mensajes de hoy capturados aún' : `Sin mensajes en "${escapeHTML(currentSelectedChat || 'este chat')}"`}</p>
+          <p class="empty-subtitle">${isGlobal ? 'Haz clic en <strong>🌐 Escanear Todos los Chats de Hoy</strong> arriba para capturarlos automáticamente.' : 'Usa el botón <strong>Este Chat</strong> o posa sobre el chat en WhatsApp Web.'}</p>
         </div>
       `;
       return;
@@ -201,6 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const filtered = messages.filter(m => {
       if (activeFilter === 'new' && !m.isNew) return false;
+      if (activeFilter === 'today' && !m.isToday) return false;
       if (activeFilter === 'in' && m.type !== 'incoming') return false;
       if (activeFilter === 'out' && m.type !== 'outgoing') return false;
       if (activeSearch && !m.text.toLowerCase().includes(activeSearch) && !m.sender.toLowerCase().includes(activeSearch)) return false;
@@ -222,10 +318,15 @@ document.addEventListener('DOMContentLoaded', () => {
     filtered.forEach(msg => {
       const card = document.createElement('div');
       card.className = `msg-card ${msg.type === 'outgoing' ? 'out' : 'in'} ${msg.isNew ? 'is-new' : ''}`;
+      const showChatPill = (currentSelectedChat === '__TODAY_ALL__' || !currentSelectedChat) && msg.chatName;
       card.innerHTML = `
         <div class="card-top">
-          <span class="card-sender">${escapeHTML(msg.sender)}</span>
+          <div style="display:flex; align-items:center; gap:5px;">
+            <span class="card-sender">${escapeHTML(msg.sender)}</span>
+            ${showChatPill ? `<span class="card-chat-pill">${escapeHTML(msg.chatName)}</span>` : ''}
+          </div>
           <div class="card-meta">
+            ${msg.isToday ? '<span class="badge-today">HOY</span>' : ''}
             ${msg.isNew ? '<span class="badge-new">NUEVO</span>' : ''}
             <span class="card-time">${escapeHTML(msg.timestamp)}</span>
           </div>
@@ -251,9 +352,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 6. Export Functions
   btnCopyAll.addEventListener('click', () => {
-    const messages = savedChats[currentSelectedChat]?.messages || [];
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
     if (messages.length === 0) return;
-    const formatted = messages.map(m => `[${m.timestamp}] ${m.sender}: ${m.text}`).join('\n');
+    const formatted = messages.map(m => `[${m.timestamp}] ${m.sender}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`).join('\n');
     navigator.clipboard.writeText(formatted).then(() => {
       const orig = btnCopyAll.innerHTML;
       btnCopyAll.innerHTML = `<span>✅</span> Copiado`;
@@ -262,31 +364,41 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   btnExportJson.addEventListener('click', () => {
-    const messages = savedChats[currentSelectedChat]?.messages || [];
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
     if (messages.length === 0) return;
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(messages, null, 2));
     const dl = document.createElement('a');
     dl.setAttribute('href', dataStr);
-    dl.setAttribute('download', `whatsapp_${(currentSelectedChat || 'chat').replace(/\s+/g, '_')}_${Date.now()}.json`);
+    dl.setAttribute('download', `whatsapp_${isGlobal ? 'todos_los_de_hoy' : (currentSelectedChat || 'chat').replace(/\s+/g, '_')}_${Date.now()}.json`);
     dl.click();
   });
 
   btnExportTxt.addEventListener('click', () => {
-    const messages = savedChats[currentSelectedChat]?.messages || [];
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
     if (messages.length === 0) return;
-    const formatted = `=== CHAT: ${currentSelectedChat} ===\nExportado: ${new Date().toLocaleString()}\nTotal: ${messages.length}\n\n` +
-      messages.map(m => `[${m.timestamp}] ${m.sender}: ${m.text}`).join('\n');
+    const title = isGlobal ? 'TODOS LOS CHATS DE HOY (GLOBAL)' : currentSelectedChat;
+    const formatted = `=== CHAT: ${title} ===\nExportado: ${new Date().toLocaleString()}\nTotal: ${messages.length}\n\n` +
+      messages.map(m => `[${m.timestamp}] ${m.sender}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`).join('\n');
     const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(formatted);
     const dl = document.createElement('a');
     dl.setAttribute('href', dataStr);
-    dl.setAttribute('download', `whatsapp_${(currentSelectedChat || 'chat').replace(/\s+/g, '_')}_${Date.now()}.txt`);
+    dl.setAttribute('download', `whatsapp_${isGlobal ? 'todos_los_de_hoy' : (currentSelectedChat || 'chat').replace(/\s+/g, '_')}_${Date.now()}.txt`);
     dl.click();
   });
 
   btnDeleteChat.addEventListener('click', () => {
-    if (!currentSelectedChat || !savedChats[currentSelectedChat]) return;
-    if (confirm(`¿Eliminar los mensajes guardados de "${currentSelectedChat}"?`)) {
-      delete savedChats[currentSelectedChat];
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const targetChat = isGlobal ? '__TODAY_ALL__' : currentSelectedChat;
+    if (!targetChat || (!savedChats[targetChat] && !isGlobal)) return;
+    const chatTitle = isGlobal ? 'Todos los chats de hoy' : targetChat;
+    if (confirm(`¿Eliminar los mensajes guardados de "${chatTitle}"?`)) {
+      if (isGlobal) {
+        delete savedChats['__TODAY_ALL__'];
+      } else {
+        delete savedChats[currentSelectedChat];
+      }
       chrome.storage.local.set({ wa_saved_chats: savedChats }, () => {
         currentSelectedChat = '';
         loadStorageData();

@@ -8,6 +8,7 @@ interface SimulatedMessage {
   text: string;
   timestamp: string;
   isNew: boolean;
+  isToday: boolean;
   type: 'incoming' | 'outgoing';
 }
 
@@ -30,11 +31,13 @@ const INITIAL_CHATS: SimulatedChat[] = [
     unreadCount: 3,
     time: '14:25',
     messages: [
-      { id: 'm1', sender: 'Carlos Mendoza', text: 'Hola, buenas tardes.', timestamp: '14:15', isNew: false, type: 'incoming' },
-      { id: 'm2', sender: 'Tú', text: '¡Hola Carlos! ¿En qué te puedo ayudar hoy?', timestamp: '14:18', isNew: false, type: 'outgoing' },
-      { id: 'm3', sender: 'Carlos Mendoza', text: 'Revisé los requerimientos con el equipo de finanzas.', timestamp: '14:22', isNew: true, type: 'incoming' },
-      { id: 'm4', sender: 'Carlos Mendoza', text: 'Necesitamos incluir 2 licencias adicionales en la propuesta.', timestamp: '14:24', isNew: true, type: 'incoming' },
-      { id: 'm5', sender: 'Carlos Mendoza', text: 'Por favor envíame la cotización actualizada del proyecto.', timestamp: '14:25', isNew: true, type: 'incoming' },
+      { id: 'm1', sender: 'Carlos Mendoza', text: 'Hola, te escribo para coordinar la reunión de ayer.', timestamp: 'Ayer 17:30', isNew: false, isToday: false, type: 'incoming' },
+      { id: 'm2', sender: 'Tú', text: 'Perfecto Carlos, quedamos atentos a los requerimientos.', timestamp: 'Ayer 17:45', isNew: false, isToday: false, type: 'outgoing' },
+      { id: 'm3', sender: 'Carlos Mendoza', text: 'Hola de nuevo, buen día.', timestamp: '14:15', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm4', sender: 'Tú', text: '¡Hola Carlos! ¿En qué te puedo ayudar hoy?', timestamp: '14:18', isNew: false, isToday: true, type: 'outgoing' },
+      { id: 'm5', sender: 'Carlos Mendoza', text: 'Revisé los requerimientos con el equipo de finanzas.', timestamp: '14:22', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm6', sender: 'Carlos Mendoza', text: 'Necesitamos incluir 2 licencias adicionales en la propuesta.', timestamp: '14:24', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm7', sender: 'Carlos Mendoza', text: 'Por favor envíame la cotización actualizada del proyecto.', timestamp: '14:25', isNew: true, isToday: true, type: 'incoming' },
     ]
   },
   {
@@ -45,10 +48,11 @@ const INITIAL_CHATS: SimulatedChat[] = [
     unreadCount: 2,
     time: '13:50',
     messages: [
-      { id: 'm6', sender: 'Laura Dev', text: 'Iniciando pipeline de testing...', timestamp: '13:40', isNew: false, type: 'incoming' },
-      { id: 'm7', sender: 'Tú', text: 'Avisen en cuanto pasen los tests e2e.', timestamp: '13:42', isNew: false, type: 'outgoing' },
-      { id: 'm8', sender: 'Laura Dev', text: 'Todos los tests pasaron en verde ✅', timestamp: '13:48', isNew: true, type: 'incoming' },
-      { id: 'm9', sender: 'Andrés Lead', text: 'El nuevo despliegue a producción fue exitoso.', timestamp: '13:50', isNew: true, type: 'incoming' },
+      { id: 'm8', sender: 'Laura Dev', text: 'El bug reportado el martes ya fue reproducido.', timestamp: '08/10 16:00', isNew: false, isToday: false, type: 'incoming' },
+      { id: 'm9', sender: 'Laura Dev', text: 'Iniciando pipeline de testing para hoy...', timestamp: '13:40', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm10', sender: 'Tú', text: 'Avisen en cuanto pasen los tests e2e.', timestamp: '13:42', isNew: false, isToday: true, type: 'outgoing' },
+      { id: 'm11', sender: 'Laura Dev', text: 'Todos los tests pasaron en verde ✅', timestamp: '13:48', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm12', sender: 'Andrés Lead', text: 'El nuevo despliegue a producción fue exitoso.', timestamp: '13:50', isNew: true, isToday: true, type: 'incoming' },
     ]
   },
   {
@@ -59,8 +63,9 @@ const INITIAL_CHATS: SimulatedChat[] = [
     unreadCount: 0,
     time: '11:10',
     messages: [
-      { id: 'm10', sender: 'María Gómez', text: 'El prospecto confirmó disponibilidad.', timestamp: '11:05', isNew: false, type: 'incoming' },
-      { id: 'm11', sender: 'María Gómez', text: 'Agendé la demo para mañana a las 10 AM.', timestamp: '11:10', isNew: false, type: 'incoming' },
+      { id: 'm13', sender: 'María Gómez', text: 'Envío reporte comercial del mes anterior.', timestamp: '07/10 09:30', isNew: false, isToday: false, type: 'incoming' },
+      { id: 'm14', sender: 'María Gómez', text: 'El prospecto confirmó disponibilidad hoy.', timestamp: '11:05', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm15', sender: 'María Gómez', text: 'Agendé la demo para mañana a las 10 AM.', timestamp: '11:10', isNew: false, isToday: true, type: 'incoming' },
     ]
   }
 ];
@@ -71,7 +76,7 @@ export default function Home() {
   const [hoveredChatId, setHoveredChatId] = useState<string | null>(null);
   const [extractedMessages, setExtractedMessages] = useState<SimulatedMessage[]>([]);
   const [lastExtractedChat, setLastExtractedChat] = useState<string>('');
-  const [filterMode, setFilterMode] = useState<'all' | 'new' | 'incoming' | 'outgoing'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'today' | 'new' | 'incoming' | 'outgoing'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'simulator' | 'installGuide' | 'codeOverview'>('simulator');
@@ -81,16 +86,43 @@ export default function Home() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleExtract = (chat: SimulatedChat, onlyNew: boolean) => {
+  const handleExtract = (chat: SimulatedChat, mode: 'all' | 'today' | 'new') => {
     setSelectedChat(chat);
     setLastExtractedChat(chat.name);
-    const msgs = onlyNew ? chat.messages.filter(m => m.isNew) : [...chat.messages];
+    let msgs: (SimulatedMessage & { chatOrigin?: string })[] = [];
+    let label = '';
+
+    if (mode === 'new') {
+      msgs = chat.messages.filter(m => m.isNew).map(m => ({ ...m, chatOrigin: chat.name }));
+      label = 'nuevos ';
+    } else if (mode === 'today') {
+      msgs = chat.messages.filter(m => m.isToday).map(m => ({ ...m, chatOrigin: chat.name }));
+      label = 'de hoy ';
+    } else {
+      msgs = chat.messages.map(m => ({ ...m, chatOrigin: chat.name }));
+    }
+
     setExtractedMessages(msgs);
-    triggerToast(`¡${msgs.length} mensajes ${onlyNew ? 'nuevos ' : ''}extraídos de "${chat.name}"!`);
+    triggerToast(`¡${msgs.length} mensajes ${label}extraídos de "${chat.name}"!`);
+  };
+
+  const handleScanAllToday = () => {
+    const allTodayMsgs: (SimulatedMessage & { chatOrigin?: string })[] = [];
+    chats.forEach(c => {
+      c.messages.filter(m => m.isToday).forEach(m => {
+        allTodayMsgs.push({ ...m, chatOrigin: c.name, isToday: true });
+      });
+    });
+    setLastExtractedChat('🌟 Todos los chats de hoy (Global)');
+    setExtractedMessages(allTodayMsgs);
+    setFilterMode('all');
+    setSearchQuery('');
+    triggerToast(`¡${allTodayMsgs.length} mensajes de hoy recopilados en todos los chats sin seleccionar ninguno!`);
   };
 
   const filteredFeed = extractedMessages.filter(m => {
     if (filterMode === 'new' && !m.isNew) return false;
+    if (filterMode === 'today' && !m.isToday) return false;
     if (filterMode === 'incoming' && m.type !== 'incoming') return false;
     if (filterMode === 'outgoing' && m.type !== 'outgoing') return false;
     if (searchQuery && !m.text.toLowerCase().includes(searchQuery.toLowerCase()) && !m.sender.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -144,7 +176,7 @@ export default function Home() {
               </span>
             </h1>
             <p className="text-xs text-[#8696a0]">
-              Captura mensajes al posarte sobre cualquier chat o desde el panel de la extensión
+              Captura mensajes al posar sobre cualquier chat: <strong>Nuevos</strong>, <strong>Del Día Actual</strong> o <strong>Todos</strong>
             </p>
           </div>
         </div>
@@ -187,14 +219,20 @@ export default function Home() {
               <div className="flex items-center gap-3">
                 <span className="text-2xl">💡</span>
                 <div>
-                  <h3 className="text-sm font-semibold text-emerald-400">Pruébalo en tiempo real:</h3>
+                  <h3 className="text-sm font-semibold text-emerald-400">Captura todos los chats de hoy automáticamente:</h3>
                   <p className="text-xs text-[#8696a0]">
-                    Pasa el cursor sobre cualquiera de los chats en la columna izquierda. Verás aparecer los botones <strong>⚡ Nuevos</strong> y <strong>📥 Listar este chat</strong> tal como funciona en WhatsApp Web.
+                    No necesitas seleccionar ningún chat. Haz clic en <strong>🌐 Escanear Todos los Chats de Hoy</strong> o posa sobre cualquier chat individual para ver sus botones.
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#8696a0]">Carpeta de la extensión:</span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleScanAllToday}
+                  className="px-4 py-2 bg-gradient-to-r from-[#00a884] to-[#25d366] text-white font-bold text-xs rounded-xl shadow-lg hover:opacity-95 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <span>🌐</span>
+                  <span>Escanear Todos de Hoy</span>
+                </button>
                 <code className="text-xs font-mono bg-[#111b21] px-2.5 py-1 rounded-md text-emerald-300 border border-[#222e35]">
                   /extension
                 </code>
@@ -243,15 +281,15 @@ export default function Home() {
                           </span>
                         )}
 
-                        {/* Hover Quick Action Buttons (Exact feature requested by user!) */}
+                        {/* Hover Quick Action Buttons */}
                         {isHovered && (
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 z-10 bg-[#111b21]/95 backdrop-blur-md px-2 py-1.5 rounded-full border border-emerald-500/40 shadow-xl animate-fadeIn">
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10 bg-[#111b21]/95 backdrop-blur-md px-2 py-1.5 rounded-full border border-emerald-500/40 shadow-xl animate-fadeIn">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleExtract(chat, true);
+                                handleExtract(chat, 'new');
                               }}
-                              className="px-2.5 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black font-semibold text-[10px] transition-all flex items-center gap-1 border border-emerald-500/30"
+                              className="px-2 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black font-semibold text-[10px] transition-all flex items-center gap-1 border border-emerald-500/30"
                               title="Capturar mensajes nuevos"
                             >
                               <span>⚡</span>
@@ -260,9 +298,20 @@ export default function Home() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleExtract(chat, false);
+                                handleExtract(chat, 'today');
                               }}
-                              className="px-2.5 py-1 rounded-full bg-[#202c33] hover:bg-[#00a884] text-white font-semibold text-[10px] transition-all flex items-center gap-1 border border-[#2a3942]"
+                              className="px-2 py-1 rounded-full bg-[#00a884]/20 hover:bg-[#00a884] text-emerald-300 hover:text-white font-semibold text-[10px] transition-all flex items-center gap-1 border border-[#00a884]/40"
+                              title="Capturar mensajes de hoy"
+                            >
+                              <span>📅</span>
+                              <span>De Hoy</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExtract(chat, 'all');
+                              }}
+                              className="px-2 py-1 rounded-full bg-[#202c33] hover:bg-[#00a884] text-white font-semibold text-[10px] transition-all flex items-center gap-1 border border-[#2a3942]"
                               title="Capturar todo el chat"
                             >
                               <span>📥</span>
@@ -276,7 +325,7 @@ export default function Home() {
                 </div>
 
                 <div className="p-3 bg-[#182229] border-t border-[#222e35] text-center text-[11px] text-[#8696a0]">
-                  💡 Pasa el ratón sobre un chat para ver los botones rápidos
+                  💡 Pasa el ratón sobre un chat para ver los botones rápidos (Nuevos, De Hoy, Todo)
                 </div>
               </div>
 
@@ -291,18 +340,27 @@ export default function Home() {
                       <span className="text-[10px] text-emerald-400">en línea</span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <button
-                      onClick={() => handleExtract(selectedChat, true)}
-                      className="px-2.5 py-1 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 rounded-lg font-medium transition-colors"
+                      onClick={() => handleExtract(selectedChat, 'new')}
+                      className="px-2 py-1 text-[11px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 rounded-lg font-medium transition-colors"
+                      title="Listar solo nuevos"
                     >
-                      ⚡ Extraer Nuevos
+                      ⚡ Nuevos
                     </button>
                     <button
-                      onClick={() => handleExtract(selectedChat, false)}
-                      className="px-2.5 py-1 text-xs bg-[#00a884] hover:bg-[#008f6f] text-white rounded-lg font-medium transition-colors"
+                      onClick={() => handleExtract(selectedChat, 'today')}
+                      className="px-2 py-1 text-[11px] bg-[#00a884]/20 hover:bg-[#00a884]/30 text-emerald-400 border border-[#00a884]/40 rounded-lg font-medium transition-colors"
+                      title="Listar mensajes de hoy"
                     >
-                      📥 Extraer Todo
+                      📅 De Hoy
+                    </button>
+                    <button
+                      onClick={() => handleExtract(selectedChat, 'all')}
+                      className="px-2 py-1 text-[11px] bg-[#00a884] hover:bg-[#008f6f] text-white rounded-lg font-medium transition-colors"
+                      title="Listar todo"
+                    >
+                      📥 Todo
                     </button>
                   </div>
                 </div>
@@ -312,17 +370,24 @@ export default function Home() {
                   {selectedChat.messages.map(msg => (
                     <div
                       key={msg.id}
-                      className={`max-w-[80%] rounded-xl px-3 py-2 text-xs relative ${
+                      className={`max-w-[85%] rounded-xl px-3 py-2 text-xs relative ${
                         msg.type === 'outgoing'
                           ? 'ml-auto bg-[#005c4b] text-white rounded-tr-none'
                           : 'mr-auto bg-[#202c33] text-[#e9edef] rounded-tl-none'
                       } ${msg.isNew ? 'ring-2 ring-emerald-400/60' : ''}`}
                     >
-                      {msg.isNew && (
-                        <div className="text-[9px] font-extrabold uppercase text-emerald-300 mb-0.5 tracking-wider">
-                          ★ Mensaje Nuevo
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {msg.isToday && (
+                          <span className="bg-[#00a884] text-white text-[9px] font-extrabold px-1.5 rounded">
+                            HOY
+                          </span>
+                        )}
+                        {msg.isNew && (
+                          <span className="bg-emerald-400 text-black text-[9px] font-extrabold px-1.5 rounded">
+                            NUEVO
+                          </span>
+                        )}
+                      </div>
                       <p className="leading-relaxed">{msg.text}</p>
                       <div className="text-[9px] text-right mt-1 opacity-70 flex items-center justify-end gap-1">
                         <span>{msg.timestamp}</span>
@@ -333,7 +398,8 @@ export default function Home() {
                 </div>
 
                 <div className="p-3 bg-[#202c33] border-t border-[#2a3942] flex items-center justify-between text-xs text-[#8696a0]">
-                  <span>Total en chat: {selectedChat.messages.length} mensajes</span>
+                  <span>Total: {selectedChat.messages.length}</span>
+                  <span>{selectedChat.messages.filter(m => m.isToday).length} de hoy</span>
                   <span>{selectedChat.messages.filter(m => m.isNew).length} sin leer</span>
                 </div>
               </div>
@@ -353,6 +419,46 @@ export default function Home() {
                   </span>
                 </div>
 
+                {/* Global Auto-Scan Full Button */}
+                <div className="p-2.5 bg-[#182229] border-b border-[#222e35]">
+                  <button
+                    onClick={handleScanAllToday}
+                    className="w-full py-2 bg-gradient-to-r from-[#00a884] to-[#25d366] text-white rounded-lg font-bold text-xs shadow-md hover:opacity-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>🌐</span>
+                    <span>Escanear Todos los Chats de Hoy</span>
+                  </button>
+                </div>
+
+                {/* Action buttons inside Extension Panel */}
+                <div className="grid grid-cols-4 gap-1.5 p-2 bg-[#182229]/60 border-b border-[#222e35]">
+                  <button
+                    onClick={handleScanAllToday}
+                    className="py-1 text-[11px] bg-gradient-to-r from-emerald-600/40 to-teal-600/40 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg font-medium flex items-center justify-center gap-1 transition-colors border border-emerald-500/30 cursor-pointer"
+                    title="Mostrar todos los mensajes de hoy de todos los chats"
+                  >
+                    <span>🌟</span> Global
+                  </button>
+                  <button
+                    onClick={() => handleExtract(selectedChat, 'all')}
+                    className="py-1 text-[11px] bg-[#202c33] hover:bg-[#2a3942] text-white rounded-lg font-medium flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <span>📥</span> Este Chat
+                  </button>
+                  <button
+                    onClick={() => handleExtract(selectedChat, 'today')}
+                    className="py-1 text-[11px] bg-[#00a884]/20 hover:bg-[#00a884] text-emerald-300 hover:text-white border border-[#00a884]/40 rounded-lg font-medium flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <span>📅</span> De Hoy
+                  </button>
+                  <button
+                    onClick={() => handleExtract(selectedChat, 'new')}
+                    className="py-1 text-[11px] bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-black border border-emerald-500/40 rounded-lg font-medium flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <span>⚡</span> Nuevos
+                  </button>
+                </div>
+
                 {/* Filters & Search */}
                 <div className="p-3 bg-[#182229] border-b border-[#222e35] flex flex-col gap-2">
                   <input
@@ -362,19 +468,20 @@ export default function Home() {
                     placeholder="🔍 Filtrar palabras clave..."
                     className="w-full bg-[#202c33] border border-[#2a3942] text-xs text-white rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500"
                   />
-                  <div className="flex gap-1.5">
-                    {(['all', 'new', 'incoming', 'outgoing'] as const).map(mode => (
+                  <div className="flex flex-wrap gap-1">
+                    {(['all', 'today', 'new', 'incoming', 'outgoing'] as const).map(mode => (
                       <button
                         key={mode}
                         onClick={() => setFilterMode(mode)}
-                        className={`text-[10px] font-medium px-2.5 py-1 rounded-md transition-colors ${
+                        className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-colors ${
                           filterMode === mode
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                             : 'bg-[#202c33] text-[#8696a0] hover:text-white'
                         }`}
                       >
                         {mode === 'all' && 'Todos'}
-                        {mode === 'new' && 'Nuevos'}
+                        {mode === 'today' && '📅 De Hoy'}
+                        {mode === 'new' && '⚡ Nuevos'}
                         {mode === 'incoming' && 'Recibidos'}
                         {mode === 'outgoing' && 'Enviados'}
                       </button>
@@ -389,7 +496,7 @@ export default function Home() {
                       <span className="text-3xl mb-2">💬</span>
                       <p className="text-xs font-semibold text-white">Ningún mensaje listado aún</p>
                       <p className="text-[11px] mt-1">
-                        Pasa el ratón sobre un chat en la lista o haz clic en <strong>Extraer</strong>.
+                        Haz clic en <strong>🌐 Escanear Todos los Chats de Hoy</strong> o posa sobre un chat.
                       </p>
                     </div>
                   ) : (
@@ -403,8 +510,20 @@ export default function Home() {
                         } ${msg.isNew ? 'ring-1 ring-emerald-400' : ''}`}
                       >
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-emerald-400">{msg.sender}</span>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-emerald-400">{msg.sender}</span>
+                            {(msg as any).chatOrigin && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-semibold truncate max-w-[120px]">
+                                {(msg as any).chatOrigin}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {msg.isToday && (
+                              <span className="bg-[#00a884] text-white text-[9px] font-extrabold px-1.5 rounded">
+                                HOY
+                              </span>
+                            )}
                             {msg.isNew && (
                               <span className="bg-emerald-400 text-black text-[9px] font-extrabold px-1.5 rounded">
                                 NUEVO
@@ -525,7 +644,7 @@ export default function Home() {
                 <div>
                   <h4 className="text-sm font-semibold text-white">¡Listo! Abre WhatsApp Web</h4>
                   <p className="text-xs text-[#8696a0] mt-1">
-                    Dirígete a <a href="https://web.whatsapp.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">web.whatsapp.com</a>. Verás el botón flotante en la esquina inferior y cuando pases el cursor sobre cualquier chat de la lista izquierda verás los botones directos para listar todos los mensajes o únicamente los nuevos.
+                    Dirígete a <a href="https://web.whatsapp.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">web.whatsapp.com</a>. Verás el botón flotante en la esquina inferior y cuando pases el cursor sobre cualquier chat de la lista izquierda verás los botones directos para listar <strong>Nuevos</strong>, <strong>De Hoy</strong> o <strong>Todo</strong>.
                   </p>
                 </div>
               </div>
@@ -552,21 +671,21 @@ export default function Home() {
               <div className="bg-[#182229] p-4 rounded-xl border border-[#2a3942]">
                 <span className="text-emerald-400 font-mono text-xs font-bold block mb-1">extension/content.js</span>
                 <p className="text-xs text-[#8696a0]">
-                  Script inyectado en WhatsApp Web. Detecta el hover sobre los chats de la lista, inyecta botones rápidos ("Listar nuevos", "Listar todo"), extrae los mensajes del DOM y proporciona el drawer lateral flotante.
+                  Script inyectado en WhatsApp Web. Detecta hover sobre chats, inyecta botones rápidos ("Nuevos", "De hoy", "Todo"), analiza fechas y separadores ("HOY", "AYER", DD/MM/YYYY) y provee el drawer lateral.
                 </p>
               </div>
 
               <div className="bg-[#182229] p-4 rounded-xl border border-[#2a3942]">
                 <span className="text-emerald-400 font-mono text-xs font-bold block mb-1">extension/content.css</span>
                 <p className="text-xs text-[#8696a0]">
-                  Estilos de interfaz inyectados: botones al pasar el ratón, botón flotante (FAB) y drawer lateral con tema oscuro de WhatsApp.
+                  Estilos de interfaz inyectados: botones al pasar el ratón, botón flotante (FAB), badges de HOY y NUEVO, y drawer lateral con tema oscuro de WhatsApp.
                 </p>
               </div>
 
               <div className="bg-[#182229] p-4 rounded-xl border border-[#2a3942]">
                 <span className="text-emerald-400 font-mono text-xs font-bold block mb-1">extension/popup.html / js / css</span>
                 <p className="text-xs text-[#8696a0]">
-                  Ventana emergente que se abre al hacer clic en el icono de la extensión en la barra de herramientas del navegador. Lista chats guardados, búsqueda, filtros y exportación a JSON/TXT.
+                  Ventana emergente que se abre al hacer clic en el icono de la extensión en la barra de herramientas del navegador. Lista chats guardados, botones para extraer "Todos", "De Hoy" o "Nuevos", búsqueda y exportación.
                 </p>
               </div>
 
