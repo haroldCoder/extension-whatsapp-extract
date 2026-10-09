@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 💬 WhatsApp Web Message Extractor (Extensión de Navegador)
 
-## Getting Started
+Extensión de navegador moderna (Google Chrome, Microsoft Edge, Brave, Opera) construida bajo el estándar **Manifest V3** para capturar, filtrar y listar mensajes de **WhatsApp Web** con un solo clic o pasando el cursor sobre cualquier conversación.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## ⚡ Características Principales
+
+1. **Acción al pasar el cursor (Hover en chats)**:
+   - Al posarte sobre cualquier chat de la lista izquierda de WhatsApp Web, aparecen automáticamente botones rápidos:
+     - ⚡ **Nuevos**: Lista únicamente los mensajes nuevos / no leídos.
+     - 📥 **Listar este chat**: Abre la conversación y extrae todos los mensajes visibles.
+
+2. **Drawer / Panel flotante dentro de WhatsApp Web**:
+   - Botón flotante (*FAB*) integrado directamente en la interfaz de WhatsApp Web con contador de mensajes.
+   - Panel lateral desplegable con tema oscuro fiel a WhatsApp.
+   - Buscador por texto en tiempo real.
+   - Filtros rápidos: `Todos`, `Nuevos`, `Recibidos`, `Enviados`.
+   - Copiado individual o masivo al portapapeles.
+   - Modo de **Auto-captura en vivo** (detecta mensajes entrantes en tiempo real mediante `MutationObserver`).
+
+3. **Popup de la Extensión**:
+   - Accesible desde la barra de herramientas del navegador haciendo clic en el icono de la extensión.
+   - Selector entre todos los chats capturados.
+   - Acciones directas para capturar el chat activo o solo los mensajes nuevos.
+   - Exportación de conversaciones a **JSON** y **TXT / CSV**.
+
+---
+
+## 🚀 Instalación Rápida en el Navegador
+
+La extensión ya está completamente lista en la carpeta [`extension/`](file:///c:/Users/User/Documents/extension-whatsapp-extract/extension).
+
+### Pasos:
+
+1. Abre tu navegador (Chrome, Edge o Brave) y ve a:
+   ```text
+   chrome://extensions
+   ```
+   *(En Microsoft Edge es `edge://extensions`)*.
+
+2. Activa el interruptor **"Modo de desarrollador"** (ubicado en la esquina superior derecha).
+
+3. Haz clic en el botón **"Cargar descomprimida"** (o *Load unpacked*).
+
+4. Selecciona la carpeta del proyecto:
+   ```text
+   c:\Users\User\Documents\extension-whatsapp-extract\extension
+   ```
+
+5. ¡Listo! Abre [web.whatsapp.com](https://web.whatsapp.com) y verás la extensión funcionando activamente.
+
+---
+
+## 📁 Estructura del Proyecto
+
+```text
+extension-whatsapp-extract/
+├── extension/                       <-- Carpeta lista para cargar en Chrome
+│   ├── manifest.json                # Configuración Manifest V3 y permisos
+│   ├── background.js                # Service Worker en segundo plano
+│   ├── content.js                   # Inyección en WhatsApp Web y extracción DOM
+│   ├── content.css                  # Estilos del botón flotante y drawer lateral
+│   ├── popup.html                   # Interfaz de la ventana emergente de la extensión
+│   ├── popup.css                    # Estilos modernos para el popup
+│   ├── popup.js                     # Lógica y comunicación de la extensión
+│   └── icons/                       # Iconos de 16px, 48px y 128px
+├── app/                             # Dashboard web interactivo y simulador (Next.js)
+│   ├── page.tsx                     # Simulador interactivo en tiempo real
+│   └── globals.css
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🎮 Simulador Web Interactivo
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Si deseas probar la experiencia y ver cómo funciona el comportamiento de hover y extracción antes de abrir WhatsApp:
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Ejecuta el servidor local:
+```bash
+npm run dev
+```
+Y abre [http://localhost:3000](http://localhost:3000) en tu navegador.
