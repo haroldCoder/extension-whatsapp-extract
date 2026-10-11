@@ -1,5 +1,11 @@
 // Background service worker for WhatsApp Web Message Extractor
 
+try {
+  importScripts('aurasystem.js');
+} catch (e) {
+  console.warn('[WA-Extractor] Could not import aurasystem.js in worker:', e);
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[WA-Extractor] Extensión instalada con éxito.');
   // Initialize storage defaults if empty
@@ -18,7 +24,7 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Update badge count
+// Update badge count & message routing
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'UPDATE_BADGE') {
     const count = request.count || 0;
@@ -40,4 +46,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true; // Keep channel open for async response
   }
+
+  // Background transfer to AuraSystem
+  if (request.action === 'TRANSFER_TO_AURASYSTEM') {
+    const { chatName, messages, businessId, workerId } = request.payload || {};
+    if (typeof auraService !== 'undefined') {
+      auraService.transferMessages({
+        chatName,
+        messages,
+        businessId,
+        workerId,
+        onProgress: (prog) => {
+          chrome.runtime.sendMessage({ action: 'AURASYSTEM_PROGRESS', progress: prog }).catch(() => {});
+        }
+      }).then((result) => {
+        sendResponse(result);
+      }).catch((err) => {
+        sendResponse({ success: false, error: err.message });
+      });
+    } else {
+      sendResponse({ success: false, error: 'AuraSystemService no disponible en worker.' });
+    }
+    return true;
+  }
 });
+

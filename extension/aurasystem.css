@@ -1,0 +1,363 @@
+/* AuraSystem Button & Modal Styles */
+/* Botón negro con ícono rosado y estética premium para AuraSystem */
+
+:root {
+  --aura-black: #0a0a0c;
+  --aura-black-hover: #141418;
+  --aura-black-active: #050507;
+  --aura-pink: #ff2d75;
+  --aura-pink-hover: #ff478b;
+  --aura-pink-light: rgba(255, 45, 117, 0.15);
+  --aura-pink-glow: rgba(255, 45, 117, 0.35);
+  --aura-border: #27272a;
+}
+
+/* AuraSystem Main Action Button */
+.btn-aurasystem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--aura-black) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--aura-border) !important;
+  border-radius: 9px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  width: 100%;
+}
+
+.btn-aurasystem:hover {
+  background-color: var(--aura-black-hover) !important;
+  border-color: var(--aura-pink) !important;
+  box-shadow: 0 0 16px var(--aura-pink-glow), 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+  transform: translateY(-1px);
+}
+
+.btn-aurasystem:active {
+  background-color: var(--aura-black-active) !important;
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+.btn-aurasystem:disabled,
+.btn-aurasystem.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  border-color: var(--aura-border) !important;
+}
+
+/* Pink Icon */
+.btn-aurasystem .aura-icon,
+.wa-btn-aurasystem .aura-icon {
+  color: var(--aura-pink);
+  stroke: var(--aura-pink);
+  flex-shrink: 0;
+  transition: transform 0.25s ease, filter 0.25s ease;
+  filter: drop-shadow(0 0 4px var(--aura-pink-glow));
+}
+
+.btn-aurasystem:hover .aura-icon,
+.wa-btn-aurasystem:hover .aura-icon {
+  transform: scale(1.15) rotate(-5deg);
+  filter: drop-shadow(0 0 8px var(--aura-pink));
+}
+
+/* In-panel Button Variant for WhatsApp Web Page */
+.wa-btn-aurasystem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #0d0e12 !important;
+  color: #ffffff !important;
+  border: 1px solid #2a2b32 !important;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+.wa-btn-aurasystem:hover {
+  background-color: #16171d !important;
+  border-color: var(--aura-pink) !important;
+  box-shadow: 0 0 14px var(--aura-pink-glow);
+  transform: translateY(-1px);
+}
+
+.wa-btn-aurasystem:active {
+  transform: translateY(0);
+}
+
+/* Loading state */
+.btn-aurasystem.is-loading .aura-icon,
+.wa-btn-aurasystem.is-loading .aura-icon {
+  animation: aura-spin 1s linear infinite;
+}
+
+@keyframes aura-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Transfer Modal / Dialog */
+.aura-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  padding: 16px;
+  animation: aura-fade-in 0.2s ease;
+}
+
+@keyframes aura-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.aura-modal-card {
+  background: #111216;
+  border: 1px solid #2d2f39;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 360px;
+  padding: 20px;
+  color: #e4e4e7;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 24px rgba(255, 45, 117, 0.15);
+  font-family: inherit;
+}
+
+.aura-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #22242c;
+  padding-bottom: 12px;
+}
+
+.aura-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.aura-modal-close {
+  background: transparent;
+  border: none;
+  color: #71717a;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.aura-modal-close:hover {
+  color: #ffffff;
+  background: #27272a;
+}
+
+.aura-field-group {
+  margin-bottom: 12px;
+}
+
+.aura-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: #a1a1aa;
+  margin-bottom: 5px;
+}
+
+.aura-input {
+  width: 100%;
+  background: #1a1b22;
+  border: 1px solid #333642;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.aura-input:focus {
+  border-color: var(--aura-pink);
+  box-shadow: 0 0 8px var(--aura-pink-glow);
+}
+
+.aura-meta-box {
+  background: #181920;
+  border: 1px solid #282a35;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+
+.aura-meta-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  color: #a1a1aa;
+}
+
+.aura-meta-row:last-child {
+  margin-bottom: 0;
+}
+
+.aura-meta-val {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.aura-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: #27272a;
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+.aura-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ff2d75, #ff758c);
+  border-radius: 99px;
+  transition: width 0.25s ease;
+}
+
+.aura-modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.aura-btn-cancel {
+  flex: 1;
+  background: #22232a;
+  border: 1px solid #333644;
+  color: #a1a1aa;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aura-btn-cancel:hover {
+  background: #2b2d37;
+  color: #ffffff;
+}
+
+/* Toast Badge for AuraSystem */
+.aura-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000000;
+  border: 1px solid var(--aura-pink);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 16px var(--aura-pink-glow);
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 9999999;
+  animation: aura-toast-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aura-toast-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 15px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* AuraSystem Config Inputs (Id de dueño, Id de trabajadora) */
+.aura-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.aura-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.aura-mini-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #a1a1aa;
+}
+
+.aura-mini-input {
+  width: 100%;
+  background: #14151b;
+  border: 1px solid #2a2c36;
+  border-radius: 7px;
+  padding: 6px 9px;
+  color: #ffffff;
+  font-size: 11.5px;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.aura-mini-input:focus {
+  border-color: var(--aura-pink);
+  box-shadow: 0 0 8px var(--aura-pink-glow);
+  background: #191b24;
+}
+
+.aura-mini-input::placeholder {
+  color: #52525b;
+}
+

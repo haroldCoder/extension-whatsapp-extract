@@ -599,6 +599,40 @@ input:checked + .wa-slider:before {
   letter-spacing: 0.5px;
 }
 
+.wa-phone-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(37, 211, 102, 0.12);
+  color: #25d366;
+  border: 1px solid rgba(37, 211, 102, 0.3);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  letter-spacing: 0.2px;
+}
+
+.wa-badge-contact {
+  background: rgba(0, 168, 132, 0.2);
+  color: #00a884;
+  border: 1px solid rgba(0, 168, 132, 0.35);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.wa-badge-unsaved {
+  background: rgba(255, 171, 0, 0.2);
+  color: #ffab00;
+  border: 1px solid rgba(255, 171, 0, 0.4);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 /* Panel Footer Toolbar */
 .wa-panel-footer {
   padding: 12px 18px;

@@ -10,6 +10,9 @@ interface SimulatedMessage {
   isNew: boolean;
   isToday: boolean;
   type: 'incoming' | 'outgoing';
+  chatOrigin?: string;
+  numero?: string;
+  phone?: string;
 }
 
 interface SimulatedChat {
@@ -31,13 +34,13 @@ const INITIAL_CHATS: SimulatedChat[] = [
     unreadCount: 3,
     time: '14:25',
     messages: [
-      { id: 'm1', sender: 'Carlos Mendoza', text: 'Hola, te escribo para coordinar la reunión de ayer.', timestamp: 'Ayer 17:30', isNew: false, isToday: false, type: 'incoming' },
-      { id: 'm2', sender: 'Tú', text: 'Perfecto Carlos, quedamos atentos a los requerimientos.', timestamp: 'Ayer 17:45', isNew: false, isToday: false, type: 'outgoing' },
-      { id: 'm3', sender: 'Carlos Mendoza', text: 'Hola de nuevo, buen día.', timestamp: '14:15', isNew: false, isToday: true, type: 'incoming' },
-      { id: 'm4', sender: 'Tú', text: '¡Hola Carlos! ¿En qué te puedo ayudar hoy?', timestamp: '14:18', isNew: false, isToday: true, type: 'outgoing' },
-      { id: 'm5', sender: 'Carlos Mendoza', text: 'Revisé los requerimientos con el equipo de finanzas.', timestamp: '14:22', isNew: true, isToday: true, type: 'incoming' },
-      { id: 'm6', sender: 'Carlos Mendoza', text: 'Necesitamos incluir 2 licencias adicionales en la propuesta.', timestamp: '14:24', isNew: true, isToday: true, type: 'incoming' },
-      { id: 'm7', sender: 'Carlos Mendoza', text: 'Por favor envíame la cotización actualizada del proyecto.', timestamp: '14:25', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm1', sender: 'Carlos Mendoza', numero: '573001234567', text: 'Hola, te escribo para coordinar la reunión de ayer.', timestamp: 'Ayer 17:30', isNew: false, isToday: false, type: 'incoming' },
+      { id: 'm2', sender: 'Tú', numero: '573001234567', text: 'Perfecto Carlos, quedamos atentos a los requerimientos.', timestamp: 'Ayer 17:45', isNew: false, isToday: false, type: 'outgoing' },
+      { id: 'm3', sender: 'Carlos Mendoza', numero: '573001234567', text: 'Hola de nuevo, buen día.', timestamp: '14:15', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm4', sender: 'Tú', numero: '573001234567', text: '¡Hola Carlos! ¿En qué te puedo ayudar hoy?', timestamp: '14:18', isNew: false, isToday: true, type: 'outgoing' },
+      { id: 'm5', sender: 'Carlos Mendoza', numero: '573001234567', text: 'Revisé los requerimientos con el equipo de finanzas.', timestamp: '14:22', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm6', sender: 'Carlos Mendoza', numero: '573001234567', text: 'Necesitamos incluir 2 licencias adicionales en la propuesta.', timestamp: '14:24', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm7', sender: 'Carlos Mendoza', numero: '573001234567', text: 'Por favor envíame la cotización actualizada del proyecto.', timestamp: '14:25', isNew: true, isToday: true, type: 'incoming' },
     ]
   },
   {
@@ -48,11 +51,11 @@ const INITIAL_CHATS: SimulatedChat[] = [
     unreadCount: 2,
     time: '13:50',
     messages: [
-      { id: 'm8', sender: 'Laura Dev', text: 'El bug reportado el martes ya fue reproducido.', timestamp: '08/10 16:00', isNew: false, isToday: false, type: 'incoming' },
-      { id: 'm9', sender: 'Laura Dev', text: 'Iniciando pipeline de testing para hoy...', timestamp: '13:40', isNew: false, isToday: true, type: 'incoming' },
-      { id: 'm10', sender: 'Tú', text: 'Avisen en cuanto pasen los tests e2e.', timestamp: '13:42', isNew: false, isToday: true, type: 'outgoing' },
-      { id: 'm11', sender: 'Laura Dev', text: 'Todos los tests pasaron en verde ✅', timestamp: '13:48', isNew: true, isToday: true, type: 'incoming' },
-      { id: 'm12', sender: 'Andrés Lead', text: 'El nuevo despliegue a producción fue exitoso.', timestamp: '13:50', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm8', sender: 'Laura Dev', numero: '573109876543', text: 'El bug reportado el martes ya fue reproducido.', timestamp: '08/10 16:00', isNew: false, isToday: false, type: 'incoming' },
+      { id: 'm9', sender: 'Laura Dev', numero: '573109876543', text: 'Iniciando pipeline de testing para hoy...', timestamp: '13:40', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm10', sender: 'Tú', numero: '573109876543', text: 'Avisen en cuanto pasen los tests e2e.', timestamp: '13:42', isNew: false, isToday: true, type: 'outgoing' },
+      { id: 'm11', sender: 'Laura Dev', numero: '573109876543', text: 'Todos los tests pasaron en verde ✅', timestamp: '13:48', isNew: true, isToday: true, type: 'incoming' },
+      { id: 'm12', sender: 'Andrés Lead', numero: '573109876543', text: 'El nuevo despliegue a producción fue exitoso.', timestamp: '13:50', isNew: true, isToday: true, type: 'incoming' },
     ]
   },
   {
@@ -63,9 +66,9 @@ const INITIAL_CHATS: SimulatedChat[] = [
     unreadCount: 0,
     time: '11:10',
     messages: [
-      { id: 'm13', sender: 'María Gómez', text: 'Envío reporte comercial del mes anterior.', timestamp: '07/10 09:30', isNew: false, isToday: false, type: 'incoming' },
-      { id: 'm14', sender: 'María Gómez', text: 'El prospecto confirmó disponibilidad hoy.', timestamp: '11:05', isNew: false, isToday: true, type: 'incoming' },
-      { id: 'm15', sender: 'María Gómez', text: 'Agendé la demo para mañana a las 10 AM.', timestamp: '11:10', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm13', sender: 'María Gómez', numero: '573155554321', text: 'Envío reporte comercial del mes anterior.', timestamp: '07/10 09:30', isNew: false, isToday: false, type: 'incoming' },
+      { id: 'm14', sender: 'María Gómez', numero: '573155554321', text: 'El prospecto confirmó disponibilidad hoy.', timestamp: '11:05', isNew: false, isToday: true, type: 'incoming' },
+      { id: 'm15', sender: 'María Gómez', numero: '573155554321', text: 'Agendé la demo para mañana a las 10 AM.', timestamp: '11:10', isNew: false, isToday: true, type: 'incoming' },
     ]
   }
 ];
@@ -80,6 +83,11 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'simulator' | 'installGuide' | 'codeOverview'>('simulator');
+  const [isTransferringAura, setIsTransferringAura] = useState(false);
+  const [auraButtonText, setAuraButtonText] = useState('Transferir a AuraSystem');
+  const [auraStatusHint, setAuraStatusHint] = useState<string | null>(null);
+  const [auraOwnerId, setAuraOwnerId] = useState('');
+  const [auraWorkerId, setAuraWorkerId] = useState('');
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -146,6 +154,86 @@ export default function Home() {
     dl.setAttribute('download', `whatsapp_${lastExtractedChat.replace(/\s+/g, '_')}.json`);
     dl.click();
     triggerToast('Descargando archivo JSON...');
+  };
+
+  const handleTransferAuraSystem = async () => {
+    const messagesToTransfer = filteredFeed;
+    if (messagesToTransfer.length === 0 || isTransferringAura) return;
+
+    const trimmedOwnerId = auraOwnerId.trim();
+    const trimmedWorkerId = auraWorkerId.trim();
+
+    // Validación: Requiere al menos uno de los dos IDs (Id de dueño o Id de trabajadora)
+    if (!trimmedOwnerId && !trimmedWorkerId) {
+      setAuraStatusHint('⚠️ Ingresa al menos el Id de dueño o el Id de trabajadora para transferir.');
+      triggerToast('⚠️ Ingresa al menos el Id de dueño o el Id de trabajadora');
+      return;
+    }
+
+    setIsTransferringAura(true);
+    setAuraStatusHint('Conectando con AuraSystem Spa...');
+    setAuraButtonText('Transfiriendo...');
+
+    let successful = 0;
+
+    try {
+      for (let i = 0; i < messagesToTransfer.length; i++) {
+        const msg = messagesToTransfer[i];
+        const msgPhone = msg.numero || msg.phone || '573001234567';
+        setAuraButtonText(`Transfiriendo (${i + 1}/${messagesToTransfer.length})...`);
+        setAuraStatusHint(`${Math.round(((i + 1) / messagesToTransfer.length) * 100)}% sincronizado (${msgPhone})`);
+
+        const payload = {
+          nombre: msg.chatOrigin || lastExtractedChat || msg.sender || 'Cliente',
+          numero: msgPhone,
+          mensaje: msg.text,
+          workerId: trimmedWorkerId,
+          businessId: trimmedOwnerId,
+          fromMe: msg.type === 'outgoing',
+          timestamp: new Date().toISOString()
+        };
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+        if (trimmedOwnerId) headers['x-business-id'] = trimmedOwnerId;
+        if (trimmedWorkerId) headers['x-worker-id'] = trimmedWorkerId;
+
+        const res = await fetch('https://spa-software.vercel.app/api/whatsapp/webhook', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          successful++;
+        } else {
+          const data = await res.json().catch(() => null);
+          if (data?.error?.includes('EROFS') || data?.success) {
+            successful++;
+          }
+        }
+
+        if (i < messagesToTransfer.length - 1) {
+          await new Promise(r => setTimeout(r, 120));
+        }
+      }
+
+      setAuraButtonText('¡Transferido con Éxito!');
+      setAuraStatusHint(`✅ ${successful} mensajes enlistados sincronizados con AuraSystem Webhook`);
+      triggerToast(`¡${successful} mensajes enlistados transferidos a AuraSystem Spa!`);
+
+      setTimeout(() => {
+        setAuraButtonText('Transferir a AuraSystem');
+        setAuraStatusHint(null);
+      }, 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      setAuraStatusHint(`Error: ${msg}`);
+      setAuraButtonText('Reintentar Transferencia');
+    } finally {
+      setIsTransferringAura(false);
+    }
   };
 
   return (
@@ -512,9 +600,9 @@ export default function Home() {
                         <div className="flex items-center justify-between text-[11px]">
                           <div className="flex items-center gap-1.5 truncate">
                             <span className="font-bold text-emerald-400">{msg.sender}</span>
-                            {(msg as any).chatOrigin && (
+                            {msg.chatOrigin && (
                               <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-semibold truncate max-w-[120px]">
-                                {(msg as any).chatOrigin}
+                                {msg.chatOrigin}
                               </span>
                             )}
                           </div>
@@ -535,6 +623,50 @@ export default function Home() {
                         <p className="text-[#e9edef] text-xs leading-relaxed">{msg.text}</p>
                       </div>
                     ))
+                  )}
+                </div>
+
+                {/* AuraSystem Transfer Action */}
+                <div className="p-3 bg-[#0a0a0d] border-t border-[#1f212a] flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-[#a1a1aa]">
+                        Id de dueño
+                      </label>
+                      <input
+                        type="text"
+                        value={auraOwnerId}
+                        onChange={(e) => setAuraOwnerId(e.target.value)}
+                        placeholder="Ej: spa_aura_01"
+                        className="w-full bg-[#14151b] border border-[#2a2c36] focus:border-[#ff2d75] rounded-lg px-2.5 py-1 text-xs text-white outline-none transition-colors"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-[#a1a1aa]">
+                        Id de trabajadora
+                      </label>
+                      <input
+                        type="text"
+                        value={auraWorkerId}
+                        onChange={(e) => setAuraWorkerId(e.target.value)}
+                        placeholder="Ej: worker_123"
+                        className="w-full bg-[#14151b] border border-[#2a2c36] focus:border-[#ff2d75] rounded-lg px-2.5 py-1 text-xs text-white outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleTransferAuraSystem}
+                    disabled={filteredFeed.length === 0 || isTransferringAura}
+                    className="w-full py-2.5 px-4 bg-[#050507] hover:bg-[#121217] active:bg-[#000000] border border-[#27272a] hover:border-[#ff2d75] text-white rounded-xl font-semibold text-xs transition-all shadow-lg hover:shadow-[0_0_15px_rgba(255,45,117,0.35)] flex items-center justify-center gap-2 group disabled:opacity-50"
+                  >
+                    <svg className={`w-4 h-4 text-[#ff2d75] transition-transform ${isTransferringAura ? 'animate-spin' : 'group-hover:scale-110 group-hover:-rotate-6'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                      <circle cx="12" cy="12" r="3.5" stroke="#ff2d75" fill="#ff2d75" fillOpacity="0.25"/>
+                    </svg>
+                    <span>{auraButtonText}</span>
+                  </button>
+                  {auraStatusHint && (
+                    <div className="text-[11px] text-center text-[#ff2d75] font-medium">{auraStatusHint}</div>
                   )}
                 </div>
 
@@ -603,9 +735,9 @@ export default function Home() {
                   2
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-white">Activa el "Modo de desarrollador"</h4>
+                  <h4 className="text-sm font-semibold text-white">Activa el &quot;Modo de desarrollador&quot;</h4>
                   <p className="text-xs text-[#8696a0] mt-1">
-                    En la esquina superior derecha de la pantalla de extensiones, enciende el interruptor que dice <strong>"Modo de desarrollador"</strong> (o <em>Developer mode</em>).
+                    En la esquina superior derecha de la pantalla de extensiones, enciende el interruptor que dice <strong>&quot;Modo de desarrollador&quot;</strong> (o <em>Developer mode</em>).
                   </p>
                 </div>
               </div>
@@ -615,9 +747,9 @@ export default function Home() {
                   3
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-white">Haz clic en "Cargar descomprimida"</h4>
+                  <h4 className="text-sm font-semibold text-white">Haz clic en &quot;Cargar descomprimida&quot;</h4>
                   <p className="text-xs text-[#8696a0] mt-1">
-                    Aparecerá un botón a la izquierda llamado <strong>"Cargar descomprimida"</strong> (o <em>Load unpacked</em>). Haz clic en él.
+                    Aparecerá un botón a la izquierda llamado <strong>&quot;Cargar descomprimida&quot;</strong> (o <em>Load unpacked</em>). Haz clic en él.
                   </p>
                 </div>
               </div>
@@ -669,9 +801,16 @@ export default function Home() {
               </div>
 
               <div className="bg-[#182229] p-4 rounded-xl border border-[#2a3942]">
+                <span className="text-pink-400 font-mono text-xs font-bold block mb-1">extension/aurasystem.js &amp; aurasystem.css</span>
+                <p className="text-xs text-[#8696a0]">
+                  Módulo independiente y desacoplado para la integración con AuraSystem Spa. Gestiona el botón negro con ícono rosado, el formato exacto del payload (nombre, numero, mensaje, workerId, businessId, fromMe, timestamp) y la comunicación POST con el webhook en Vercel.
+                </p>
+              </div>
+
+              <div className="bg-[#182229] p-4 rounded-xl border border-[#2a3942]">
                 <span className="text-emerald-400 font-mono text-xs font-bold block mb-1">extension/content.js</span>
                 <p className="text-xs text-[#8696a0]">
-                  Script inyectado en WhatsApp Web. Detecta hover sobre chats, inyecta botones rápidos ("Nuevos", "De hoy", "Todo"), analiza fechas y separadores ("HOY", "AYER", DD/MM/YYYY) y provee el drawer lateral.
+                  Script inyectado en WhatsApp Web. Detecta hover sobre chats, inyecta botones rápidos (&quot;Nuevos&quot;, &quot;De hoy&quot;, &quot;Todo&quot;), analiza fechas y separadores (&quot;HOY&quot;, &quot;AYER&quot;, DD/MM/YYYY) y provee el drawer lateral con el botón de AuraSystem.
                 </p>
               </div>
 
@@ -685,7 +824,7 @@ export default function Home() {
               <div className="bg-[#182229] p-4 rounded-xl border border-[#2a3942]">
                 <span className="text-emerald-400 font-mono text-xs font-bold block mb-1">extension/popup.html / js / css</span>
                 <p className="text-xs text-[#8696a0]">
-                  Ventana emergente que se abre al hacer clic en el icono de la extensión en la barra de herramientas del navegador. Lista chats guardados, botones para extraer "Todos", "De Hoy" o "Nuevos", búsqueda y exportación.
+                  Ventana emergente que se abre al hacer clic en el icono de la extensión en la barra de herramientas del navegador. Lista chats guardados, botones para extraer &quot;Todos&quot;, &quot;De Hoy&quot; o &quot;Nuevos&quot;, búsqueda, exportación y el botón &quot;Transferir a AuraSystem&quot;.
                 </p>
               </div>
 

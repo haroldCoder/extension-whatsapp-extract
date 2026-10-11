@@ -8,7 +8,8 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://web.whatsapp.com/*"
+    "https://web.whatsapp.com/*",
+    "https://spa-software.vercel.app/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -28,10 +29,22 @@
         "https://web.whatsapp.com/*"
       ],
       "js": [
+        "page_bridge.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "aurasystem.js",
         "content.js"
       ],
       "css": [
-        "content.css"
+        "content.css",
+        "aurasystem.css"
       ],
       "run_at": "document_idle"
     }

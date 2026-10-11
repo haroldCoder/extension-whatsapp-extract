@@ -28,6 +28,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnExportJson = document.getElementById('btn-export-json');
   const btnExportTxt = document.getElementById('btn-export-txt');
   const btnDeleteChat = document.getElementById('btn-delete-chat');
+  const btnTransferAuraSystem = document.getElementById('btn-transfer-aurasystem');
+  const txtTransferAuraSystem = document.getElementById('txt-transfer-aurasystem');
+  const auraStatusHint = document.getElementById('aurasystem-status-hint');
+  const inputAuraBusinessId = document.getElementById('input-aura-business-id');
+  const inputAuraWorkerId = document.getElementById('input-aura-worker-id');
+
+  // Load saved AuraSystem IDs safely
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage?.local) {
+      chrome.storage.local.get(['aurasystem_settings'], (cfg) => {
+        if (chrome.runtime?.lastError) return;
+        if (inputAuraBusinessId) {
+          inputAuraBusinessId.value = cfg?.aurasystem_settings?.businessId || '';
+        }
+        if (inputAuraWorkerId) {
+          inputAuraWorkerId.value = cfg?.aurasystem_settings?.workerId || '';
+        }
+      });
+    }
+  } catch (e) {
+    // Ignore context invalidation
+  }
+
+  const saveAuraInputs = () => {
+    try {
+      const bId = inputAuraBusinessId ? inputAuraBusinessId.value.trim() : '';
+      const wId = inputAuraWorkerId ? inputAuraWorkerId.value.trim() : '';
+      if (typeof auraService !== 'undefined') {
+        auraService.saveConfig({ businessId: bId, workerId: wId }).catch(() => {});
+      } else if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage?.local) {
+        chrome.storage.local.set({ aurasystem_settings: { businessId: bId, workerId: wId } });
+      }
+    } catch (e) {
+      // Ignore context invalidation
+    }
+  };
+  if (inputAuraBusinessId) inputAuraBusinessId.addEventListener('input', saveAuraInputs);
+  if (inputAuraWorkerId) inputAuraWorkerId.addEventListener('input', saveAuraInputs);
 
   // 1. Check current tab status
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -66,10 +104,13 @@ document.addEventListener('DOMContentLoaded', () => {
   btnGoWa.addEventListener('click', openWhatsApp);
   btnOpenWa.addEventListener('click', openWhatsApp);
 
+  let realPhoneCache = {};
+
   // 2. Load data from chrome.storage.local
   function loadStorageData() {
-    chrome.storage.local.get(['wa_saved_chats'], (res) => {
+    chrome.storage.local.get(['wa_saved_chats', 'wa_real_phone_cache'], (res) => {
       savedChats = res.wa_saved_chats || {};
+      realPhoneCache = res.wa_real_phone_cache || {};
       populateChatDropdown();
       renderMessages();
     });
@@ -77,8 +118,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Listen to storage changes from content script
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.wa_saved_chats) {
-      savedChats = changes.wa_saved_chats.newValue || {};
+    if (area === 'local') {
+      if (changes.wa_saved_chats) {
+        savedChats = changes.wa_saved_chats.newValue || {};
+      }
+      if (changes.wa_real_phone_cache) {
+        realPhoneCache = changes.wa_real_phone_cache.newValue || {};
+      }
       populateChatDropdown();
       renderMessages();
     }
@@ -91,9 +137,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (savedChats['__TODAY_ALL__']?.messages?.length > 0) {
       savedChats['__TODAY_ALL__'].messages.forEach(m => {
-        if (!seen.has(m.id)) {
+        if (m.isToday && !seen.has(m.id)) {
           seen.add(m.id);
-          all.push({ ...m, isToday: true });
+          all.push(m);
         }
       });
     }
@@ -102,11 +148,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (chatName === '__TODAY_ALL__') return;
       const chatMsgs = savedChats[chatName]?.messages || [];
       chatMsgs.forEach(m => {
-        const ts = (m.timestamp || '').toLowerCase();
-        const isNotYesterday = !ts.includes('ayer') && !ts.includes('yesterday') && !ts.includes('ontem');
-        if ((m.isToday || isNotYesterday) && !seen.has(m.id)) {
+        if (m.isToday && !seen.has(m.id)) {
           seen.add(m.id);
-          all.push({ ...m, chatName: m.chatName || chatName, isToday: true });
+          all.push({ ...m, chatName: m.chatName || chatName });
         }
       });
     });
@@ -277,13 +321,29 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMessages();
   });
 
+  // Helper: Retrieve only the messages currently listed in the UI feed based on chat and active filters
+  function getCurrentlyListedMessages() {
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
+
+    return messages.filter(m => {
+      if (activeFilter === 'new' && !m.isNew) return false;
+      if (activeFilter === 'today' && !m.isToday) return false;
+      if (activeFilter === 'in' && m.type !== 'incoming') return false;
+      if (activeFilter === 'out' && m.type !== 'outgoing') return false;
+      if (activeSearch && !m.text.toLowerCase().includes(activeSearch) && !m.sender.toLowerCase().includes(activeSearch)) return false;
+      return true;
+    });
+  }
+
   // 5. Render Messages Feed
   function renderMessages() {
     const isGlobal = currentSelectedChat === '__TODAY_ALL__';
-    const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
-    statsBadge.textContent = `${messages.length} msgs`;
+    const allMessagesInChat = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
+    const filtered = getCurrentlyListedMessages();
+    statsBadge.textContent = `${filtered.length} / ${allMessagesInChat.length} msgs`;
 
-    if (!messages || messages.length === 0) {
+    if (!allMessagesInChat || allMessagesInChat.length === 0) {
       messagesContainer.innerHTML = `
         <div class="empty-feed">
           <div class="empty-icon">💬</div>
@@ -293,15 +353,6 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       return;
     }
-
-    const filtered = messages.filter(m => {
-      if (activeFilter === 'new' && !m.isNew) return false;
-      if (activeFilter === 'today' && !m.isToday) return false;
-      if (activeFilter === 'in' && m.type !== 'incoming') return false;
-      if (activeFilter === 'out' && m.type !== 'outgoing') return false;
-      if (activeSearch && !m.text.toLowerCase().includes(activeSearch) && !m.sender.toLowerCase().includes(activeSearch)) return false;
-      return true;
-    });
 
     if (filtered.length === 0) {
       messagesContainer.innerHTML = `
@@ -314,15 +365,87 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+  function isLikelyLid(val) {
+    if (!val) return false;
+    const str = typeof val === 'object' ? String(val._serialized || val.id || val.user || '') : String(val);
+    if (str.includes('@lid')) return true;
+    if (typeof val === 'object' && val.server === 'lid') return true;
+    const digits = str.replace(/\D/g, '');
+    if (digits.length >= 14 && digits.startsWith('1')) return true;
+    if (digits.length === 15) return true;
+    if (digits.length >= 16) return true;
+    return false;
+  }
+
+  function normalizeContactName(name) {
+    if (!name) return '';
+    return name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
+  }
+
+  function getResolvedPhone(msg) {
+    const rawNum = msg.numero || msg.phone || '';
+    let validNum = (!isLikelyLid(rawNum) && String(rawNum).replace(/\D/g, '').length >= 7) ? String(rawNum).replace(/\D/g, '') : '';
+    if (!validNum && realPhoneCache) {
+      const norm = normalizeContactName(msg.chatName || msg.sender || '');
+      const cached = realPhoneCache[norm] || realPhoneCache[msg.chatName] || realPhoneCache[msg.sender];
+      if (cached && !isLikelyLid(cached)) {
+        validNum = String(cached).replace(/\D/g, '');
+      }
+    }
+    return validNum;
+  }
+
+  function renderMessages() {
+    const isGlobal = currentSelectedChat === '__TODAY_ALL__';
+    const allMessagesInChat = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
+
+    // Filter
+    let filtered = allMessagesInChat.filter(msg => {
+      if (activeFilter === 'new') return msg.isNew;
+      if (activeFilter === 'today') return msg.isToday;
+      if (activeFilter === 'in') return msg.type === 'incoming';
+      if (activeFilter === 'out') return msg.type === 'outgoing';
+      return true;
+    });
+
+    // Search query
+    if (activeSearch) {
+      filtered = filtered.filter(msg =>
+        (msg.text && msg.text.toLowerCase().includes(activeSearch)) ||
+        (msg.sender && msg.sender.toLowerCase().includes(activeSearch)) ||
+        (msg.chatName && msg.chatName.toLowerCase().includes(activeSearch)) ||
+        (msg.numero && msg.numero.includes(activeSearch))
+      );
+    }
+
+    if (filtered.length === 0) {
+      messagesContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">💬</div>
+          <div class="empty-state-text">No hay mensajes que coincidan</div>
+        </div>
+      `;
+      return;
+    }
+
     messagesContainer.innerHTML = '';
     filtered.forEach(msg => {
       const card = document.createElement('div');
       card.className = `msg-card ${msg.type === 'outgoing' ? 'out' : 'in'} ${msg.isNew ? 'is-new' : ''}`;
       const showChatPill = (currentSelectedChat === '__TODAY_ALL__' || !currentSelectedChat) && msg.chatName;
+      const numDisplay = getResolvedPhone(msg);
+
       card.innerHTML = `
         <div class="card-top">
-          <div style="display:flex; align-items:center; gap:5px;">
+          <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
             <span class="card-sender">${escapeHTML(msg.sender)}</span>
+            ${numDisplay ? `<span class="card-phone-pill" title="Número de teléfono">📱 +${escapeHTML(numDisplay)}</span>` : ''}
+            ${msg.isSavedContact === true ? '<span class="badge-contact" title="Contacto guardado">👤 Contacto</span>' : (msg.isSavedContact === false ? '<span class="badge-unsaved" title="Número no agregado">🆕 No guardado</span>' : '')}
             ${showChatPill ? `<span class="card-chat-pill">${escapeHTML(msg.chatName)}</span>` : ''}
           </div>
           <div class="card-meta">
@@ -339,7 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       card.querySelector('.btn-card-copy').addEventListener('click', (e) => {
         const btn = e.target;
-        navigator.clipboard.writeText(`[${msg.timestamp}] ${msg.sender}: ${msg.text}`);
+        const phoneTxt = numDisplay ? ` (+${numDisplay})` : '';
+        navigator.clipboard.writeText(`[${msg.timestamp}] ${msg.sender}${phoneTxt}: ${msg.text}`);
         btn.textContent = '¡Copiado!';
         setTimeout(() => { btn.textContent = 'Copiar'; }, 1200);
       });
@@ -355,7 +479,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const isGlobal = currentSelectedChat === '__TODAY_ALL__';
     const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
     if (messages.length === 0) return;
-    const formatted = messages.map(m => `[${m.timestamp}] ${m.sender}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`).join('\n');
+    const formatted = messages.map(m => {
+      const validNum = getResolvedPhone(m);
+      const phoneTxt = validNum ? ` (+${validNum})` : '';
+      return `[${m.timestamp}] ${m.sender}${phoneTxt}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`;
+    }).join('\n');
     navigator.clipboard.writeText(formatted).then(() => {
       const orig = btnCopyAll.innerHTML;
       btnCopyAll.innerHTML = `<span>✅</span> Copiado`;
@@ -367,7 +495,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const isGlobal = currentSelectedChat === '__TODAY_ALL__';
     const messages = isGlobal ? getGlobalTodayMessages() : (savedChats[currentSelectedChat]?.messages || []);
     if (messages.length === 0) return;
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(messages, null, 2));
+    const cleanMessages = messages.map(m => {
+      const copy = { ...m };
+      const validNum = getResolvedPhone(copy);
+      copy.numero = validNum;
+      copy.phone = validNum;
+      return copy;
+    });
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(cleanMessages, null, 2));
     const dl = document.createElement('a');
     dl.setAttribute('href', dataStr);
     dl.setAttribute('download', `whatsapp_${isGlobal ? 'todos_los_de_hoy' : (currentSelectedChat || 'chat').replace(/\s+/g, '_')}_${Date.now()}.json`);
@@ -380,7 +515,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (messages.length === 0) return;
     const title = isGlobal ? 'TODOS LOS CHATS DE HOY (GLOBAL)' : currentSelectedChat;
     const formatted = `=== CHAT: ${title} ===\nExportado: ${new Date().toLocaleString()}\nTotal: ${messages.length}\n\n` +
-      messages.map(m => `[${m.timestamp}] ${m.sender}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`).join('\n');
+      messages.map(m => {
+        const validNum = getResolvedPhone(m);
+        const phoneTxt = validNum ? ` [Tel: +${validNum}]` : '';
+        return `[${m.timestamp}] ${m.sender}${phoneTxt}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`;
+      }).join('\n');
     const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(formatted);
     const dl = document.createElement('a');
     dl.setAttribute('href', dataStr);
@@ -405,6 +544,114 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
+
+  // 7. AuraSystem Transfer Flow
+  if (btnTransferAuraSystem) {
+    btnTransferAuraSystem.addEventListener('click', async () => {
+      // Get ONLY the messages that are currently listed in the UI feed
+      let messages = getCurrentlyListedMessages();
+      let chatTitle = (currentSelectedChat === '__TODAY_ALL__') ? 'Todos los chats de hoy (Global)' : (currentSelectedChat || 'Chat Activo');
+
+      // If no messages stored yet, try quick extract from active WhatsApp tab
+      if (messages.length === 0 && isWhatsAppTab && activeTabId) {
+        setAuraStatus('Extrayendo mensajes del chat actual...', '#a1a1aa');
+        btnTransferAuraSystem.classList.add('is-loading');
+        try {
+          const res = await new Promise((resolve) => {
+            chrome.tabs.sendMessage(activeTabId, { action: 'EXTRACT_CURRENT_CHAT' }, (r) => {
+              if (chrome.runtime.lastError) resolve(null);
+              else resolve(r);
+            });
+          });
+          if (res && res.messages && res.messages.length > 0) {
+            chatTitle = res.chatName || chatTitle;
+            loadStorageData();
+            messages = getCurrentlyListedMessages();
+          }
+        } catch (e) {
+          // ignore
+        }
+        btnTransferAuraSystem.classList.remove('is-loading');
+      }
+
+      if (messages.length === 0) {
+        setAuraStatus('⚠️ No hay mensajes enlistados para transferir.', '#ff758c');
+        setTimeout(() => setAuraStatus('', ''), 3500);
+        return;
+      }
+
+      const businessId = inputAuraBusinessId ? inputAuraBusinessId.value.trim() : '';
+      const workerId = inputAuraWorkerId ? inputAuraWorkerId.value.trim() : '';
+
+      // Validación: Requiere al menos uno de los dos IDs (businessId o workerId)
+      if (!businessId && !workerId) {
+        setAuraStatus('⚠️ Ingresa al menos el Id de dueño o el Id de trabajadora.', '#ff758c');
+        if (inputAuraBusinessId) {
+          inputAuraBusinessId.focus();
+        }
+        return;
+      }
+
+      // Start transfer directly using each message's own number
+      btnTransferAuraSystem.disabled = true;
+      btnTransferAuraSystem.classList.add('is-loading');
+      setAuraStatus('Iniciando transferencia...', '#ff2d75');
+
+      try {
+        if (typeof auraService !== 'undefined') {
+          const result = await auraService.transferMessages({
+            chatName: chatTitle,
+            messages,
+            businessId,
+            workerId,
+            onProgress: ({ current, total, percentage, phoneNumber }) => {
+              if (txtTransferAuraSystem) {
+                txtTransferAuraSystem.textContent = `Transfiriendo (${current}/${total})...`;
+              }
+              setAuraStatus(`${percentage}% completado (${current}/${total})${phoneNumber ? ` • ${phoneNumber}` : ''}`, '#ff2d75');
+            }
+          });
+
+          if (result && result.success) {
+            if (txtTransferAuraSystem) {
+              txtTransferAuraSystem.textContent = '¡Transferido con Éxito!';
+            }
+            setAuraStatus(`✅ ${result.successful} mensaje(s) sincronizados con AuraSystem Spa`, '#25D366');
+            setTimeout(() => {
+              if (txtTransferAuraSystem) {
+                txtTransferAuraSystem.textContent = 'Transferir a AuraSystem';
+              }
+              setAuraStatus('', '');
+            }, 4000);
+          } else {
+            setAuraStatus(`⚠️ ${result?.error || 'No se pudo completar la transferencia'}`, '#ff4d4f');
+            if (txtTransferAuraSystem) {
+              txtTransferAuraSystem.textContent = 'Reintentar Transferencia';
+            }
+          }
+        } else {
+          setAuraStatus('Error: Módulo AuraSystem no cargado.', '#ff4d4f');
+        }
+      } catch (err) {
+        setAuraStatus(`Error: ${err.message}`, '#ff4d4f');
+      } finally {
+        btnTransferAuraSystem.disabled = false;
+        btnTransferAuraSystem.classList.remove('is-loading');
+      }
+    });
+  }
+
+  function setAuraStatus(msg, color) {
+    if (!auraStatusHint) return;
+    if (!msg) {
+      auraStatusHint.style.display = 'none';
+      auraStatusHint.textContent = '';
+    } else {
+      auraStatusHint.style.display = 'block';
+      auraStatusHint.style.color = color || '#ff2d75';
+      auraStatusHint.textContent = msg;
+    }
+  }
 
   function escapeHTML(str) {
     if (!str) return '';

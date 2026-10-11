@@ -21,6 +21,337 @@
       .trim();
   }
 
+  // Helper: Detect WhatsApp / Meta internal LIDs (Linked Identity)
+  function isLikelyLid(val) {
+    if (!val) return false;
+    const str = typeof val === 'object' ? String(val._serialized || val.id || val.user || '') : String(val);
+    if (str.includes('@lid')) return true;
+    if (typeof val === 'object' && val.server === 'lid') return true;
+    const digits = str.replace(/\D/g, '');
+    // Meta / WhatsApp LIDs are typically 14 to 17 digits (commonly 15 digits e.g. 171983392252014)
+    if (digits.length >= 14 && digits.startsWith('1')) return true;
+    if (digits.length === 15) return true;
+    if (digits.length >= 16) return true;
+    return false;
+  }
+
+  // Helper: Clean phone number to digits only
+  function cleanPhoneNumber(raw) {
+    if (!raw) return '';
+    return String(raw).replace(/\D/g, '');
+  }
+
+  // Helper to extract REAL phone digits from any WhatsApp Wid object, string, or property
+  function extractDigitsFromAny(val) {
+    if (!val) return '';
+    if (isLikelyLid(val)) return '';
+
+    if (typeof val === 'string') {
+      if (val.includes('@') && !val.includes('@c.us') && !val.includes('@s.whatsapp.net')) return '';
+      const match = val.match(/(\d{7,15})@(c\.us|s\.whatsapp\.net)/i) || val.match(/^(\d{7,15})$/);
+      if (match) {
+        if (isLikelyLid(match[1])) return '';
+        return match[1];
+      }
+      const digits = val.replace(/\D/g, '');
+      if (digits.length >= 7 && digits.length <= 15 && !isLikelyLid(digits)) return digits;
+      return '';
+    }
+
+    if (typeof val === 'object') {
+      if (val.server && val.server !== 'c.us' && val.server !== 's.whatsapp.net') return '';
+      if (val.pnJid) {
+        const d = extractDigitsFromAny(val.pnJid);
+        if (d) return d;
+      }
+      if (val.phoneNumber) {
+        const d = extractDigitsFromAny(val.phoneNumber);
+        if (d) return d;
+      }
+      if (val.phone) {
+        const d = extractDigitsFromAny(val.phone);
+        if (d) return d;
+      }
+      if (val.number) {
+        const d = extractDigitsFromAny(val.number);
+        if (d) return d;
+      }
+      if (val.user && (val.server === 'c.us' || val.server === 's.whatsapp.net' || !val.server)) {
+        const u = String(val.user);
+        if (!isLikelyLid(u) && /^\d{7,15}$/.test(u)) return u;
+      }
+      if (val._serialized && !isLikelyLid(val._serialized)) {
+        return extractDigitsFromAny(val._serialized);
+      }
+      if (val.id && !isLikelyLid(val.id)) {
+        return extractDigitsFromAny(val.id);
+      }
+    }
+    return '';
+  }
+
+  // Helper to extract serialized JID string from any Wid object or string
+  function extractJidString(val) {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (val._serialized) return String(val._serialized);
+      if (val.id) return extractJidString(val.id);
+      if (val.user && val.server) return `${val.user}@${val.server}`;
+    }
+    return '';
+  }
+
+  // Helper: Normalize contact names removing accents, emojis, and punctuation (Mamá -> mama)
+  function normalizeContactName(str) {
+    if (!str) return '';
+    return cleanWhatsAppText(String(str))
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Quita tildes: Mamá -> mama
+      .replace(/[^\w\s]/g, '')
+      .trim();
+  }
+
+  // In-memory cache for contacts and chats from WhatsApp Web
+  const contactsCache = {
+    byPhone: new Map(), // phone digits -> { phone, name, pushname, isSaved }
+    byName: new Map(),  // normalized name -> { phone, name, pushname, isSaved }
+    byJid: new Map(),   // jid -> { phone, name, pushname, isSaved }
+    byLid: new Map()    // lid digits/jid -> { phone, name, pushname, isSaved }
+  };
+  window.contactsCache = contactsCache;
+
+  // Active chat info captured from WhatsApp React Fiber via page_bridge.js
+  let lastActiveBridgeInfo = null;
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.source === 'WA_EXTRACTOR_PAGE_BRIDGE' && e.data.type === 'ACTIVE_CHAT_INFO') {
+      const payload = e.data.payload || {};
+      if (payload.phone && !isLikelyLid(payload.phone)) {
+        lastActiveBridgeInfo = payload;
+        window.waActiveChatPhone = payload.phone;
+        const info = {
+          phone: payload.phone,
+          name: payload.name || '',
+          pushname: payload.pushname || '',
+          isSaved: !!payload.isSaved
+        };
+        contactsCache.byPhone.set(payload.phone, info);
+        if (payload.name) {
+          contactsCache.byName.set(normalizeContactName(payload.name), info);
+          contactsCache.byName.set(cleanWhatsAppText(payload.name).toLowerCase(), info);
+        }
+      }
+    }
+  });
+
+  /**
+   * Sync contacts and chats from WhatsApp Web's IndexedDB ('model-storage')
+   */
+  async function syncWhatsAppContacts() {
+    try {
+      // 1. Ask page_bridge.js for active chat info immediately
+      window.postMessage({
+        source: 'WA_EXTRACTOR_CONTENT_SCRIPT',
+        type: 'REQUEST_ACTIVE_CHAT_INFO'
+      }, '*');
+
+      // Load persistent verified phone cache
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.get(['wa_real_phone_cache'], (res) => {
+          const cache = res?.wa_real_phone_cache || {};
+          for (const [key, phone] of Object.entries(cache)) {
+            if (phone && !isLikelyLid(phone)) {
+              const info = { phone, name: key, pushname: '', isSaved: true };
+              contactsCache.byName.set(key, info);
+              contactsCache.byPhone.set(phone, info);
+              contactsCache.byLid.set(key, info);
+            }
+          }
+          sanitizeSavedChats();
+        });
+      }
+
+      // Check active chat and auto-explore if phone unknown
+      setTimeout(() => {
+        const activeName = getActiveChatName();
+        if (activeName && activeName !== 'Chat Activo') {
+          const norm = normalizeContactName(activeName);
+          if (!contactsCache.byName.get(norm)?.phone) {
+            exploreContactForRealPhone(activeName, true);
+          }
+        }
+      }, 1500);
+
+      if (typeof indexedDB === 'undefined') return;
+
+      const openDb = (dbName) => new Promise((resolve) => {
+        try {
+          const req = indexedDB.open(dbName);
+          req.onsuccess = (e) => resolve(e.target.result);
+          req.onerror = () => resolve(null);
+          req.onblocked = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+
+      const db = await openDb('model-storage') || await openDb('wawc');
+      if (!db) return;
+
+      const lidToPhoneMap = new Map();
+
+      // 1. First pass on 'contact' store: find contacts and build LID <-> phone mappings
+      if (db.objectStoreNames.contains('contact')) {
+        await new Promise((resolve) => {
+          try {
+            const tx = db.transaction(['contact'], 'readonly');
+            const store = tx.objectStore('contact');
+            const req = store.getAll();
+            req.onsuccess = () => {
+              const contacts = req.result || [];
+              
+              // Phase A: build LID mappings
+              contacts.forEach(c => {
+                if (!c) return;
+                const idStr = extractJidString(c.id);
+                const lidStr = extractJidString(c.lid);
+                const lidDigits = (lidStr || (isLikelyLid(idStr) ? idStr : '')).replace(/\D/g, '');
+                
+                const realPhone = extractDigitsFromAny(c.phoneNumber) ||
+                                  extractDigitsFromAny(c.pnJid) ||
+                                  (!isLikelyLid(idStr) ? extractDigitsFromAny(c.id) : '');
+                
+                if (lidDigits && realPhone && !isLikelyLid(realPhone)) {
+                  lidToPhoneMap.set(lidDigits, realPhone);
+                }
+              });
+
+              // Phase B: register contacts
+              contacts.forEach(c => {
+                if (!c) return;
+                const idStr = extractJidString(c.id);
+                const lidStr = extractJidString(c.lid);
+                const lidDigits = (lidStr || (isLikelyLid(idStr) ? idStr : '')).replace(/\D/g, '');
+
+                let phone = extractDigitsFromAny(c.phoneNumber) ||
+                            extractDigitsFromAny(c.pnJid) ||
+                            (!isLikelyLid(idStr) ? extractDigitsFromAny(c.id) : '');
+
+                if (!phone && lidDigits) {
+                  phone = lidToPhoneMap.get(lidDigits) || '';
+                }
+
+                if (isLikelyLid(phone)) phone = '';
+
+                const name = cleanWhatsAppText(c.name || c.formattedName || c.displayName || '');
+                const pushname = cleanWhatsAppText(c.pushname || c.notifyName || '');
+                const isSaved = c.isMyContact === true || c.isAddressBookContact === true || (name.length > 0 && name !== pushname && name !== phone);
+
+                const info = {
+                  id: idStr,
+                  phone,
+                  name,
+                  pushname,
+                  isSaved: !!isSaved,
+                  lid: lidStr || lidDigits
+                };
+
+                if (phone) contactsCache.byPhone.set(phone, info);
+                if (name) {
+                  const norm = normalizeContactName(name);
+                  if (norm) contactsCache.byName.set(norm, info);
+                  contactsCache.byName.set(name.toLowerCase(), info);
+                  contactsCache.byName.set(name, info);
+                }
+                if (pushname) {
+                  const normPush = normalizeContactName(pushname);
+                  if (normPush && !contactsCache.byName.has(normPush)) contactsCache.byName.set(normPush, info);
+                }
+                if (idStr && !isLikelyLid(idStr)) contactsCache.byJid.set(idStr, info);
+                if (lidDigits) contactsCache.byLid.set(lidDigits, info);
+                if (lidStr) contactsCache.byLid.set(lidStr, info);
+              });
+              resolve();
+            };
+            req.onerror = () => resolve();
+          } catch (e) {
+            resolve();
+          }
+        });
+      }
+
+      // 2. Process 'chat' store
+      if (db.objectStoreNames.contains('chat')) {
+        await new Promise((resolve) => {
+          try {
+            const tx = db.transaction(['chat'], 'readonly');
+            const store = tx.objectStore('chat');
+            const req = store.getAll();
+            req.onsuccess = () => {
+              const chats = req.result || [];
+              chats.forEach(ch => {
+                if (!ch) return;
+                const idStr = extractJidString(ch.id);
+                const lidDigits = (extractJidString(ch.lid) || (isLikelyLid(idStr) ? idStr : '')).replace(/\D/g, '');
+
+                let phone = extractDigitsFromAny(ch.phoneNumber) ||
+                            extractDigitsFromAny(ch.pnJid) ||
+                            extractDigitsFromAny(ch.contact);
+
+                if (!phone && lidDigits) {
+                  phone = lidToPhoneMap.get(lidDigits) || '';
+                }
+
+                if (!phone && !isLikelyLid(idStr)) {
+                  phone = extractDigitsFromAny(ch.id);
+                }
+
+                if (isLikelyLid(phone)) phone = '';
+
+                const name = cleanWhatsAppText(ch.name || ch.formattedTitle || ch.contact?.name || ch.contact?.formattedName || '');
+                const pushname = cleanWhatsAppText(ch.contact?.pushname || '');
+                if (phone) {
+                  const norm = normalizeContactName(name);
+                  const isSaved = !/^\+?\d[\d\s-]+\d$/.test(name) && name.length > 0;
+                  const info = {
+                    id: idStr,
+                    phone,
+                    name: name || phone,
+                    pushname: pushname,
+                    isSaved: isSaved
+                  };
+                  if (norm) {
+                    if (!contactsCache.byName.has(norm) || !contactsCache.byName.get(norm)?.phone) {
+                      contactsCache.byName.set(norm, info);
+                    }
+                  }
+                  if (name && (!contactsCache.byName.has(name.toLowerCase()) || !contactsCache.byName.get(name.toLowerCase())?.phone)) {
+                    contactsCache.byName.set(name.toLowerCase(), info);
+                  }
+                  if (!contactsCache.byPhone.has(phone)) {
+                    contactsCache.byPhone.set(phone, info);
+                  }
+                  if (idStr && !isLikelyLid(idStr)) contactsCache.byJid.set(idStr, info);
+                  if (lidDigits) contactsCache.byLid.set(lidDigits, info);
+                }
+              });
+              resolve();
+            };
+            req.onerror = () => resolve();
+          } catch (e) {
+            resolve();
+          }
+        });
+      }
+
+      db.close();
+      sanitizeSavedChats();
+    } catch (err) {
+      // Ignore background sync errors
+    }
+  }
+
   // Safe wrapper for chrome.storage.local.set to prevent "Extension context invalidated"
   function saveToStorage(data, callback) {
     try {
@@ -56,7 +387,8 @@
     }
   }
 
-  // Initialize storage
+  // Initialize storage & sync WhatsApp contacts
+  syncWhatsAppContacts();
   try {
     if (typeof chrome !== 'undefined' && chrome.storage?.local) {
       chrome.storage.local.get(['wa_saved_chats', 'wa_settings'], (result) => {
@@ -66,6 +398,7 @@
         }
         updateBadge();
         initUI();
+        syncWhatsAppContacts();
       });
 
       chrome.storage.onChanged.addListener((changes, area) => {
@@ -87,18 +420,24 @@
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
       chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'EXTRACT_CURRENT_CHAT') {
-      const result = extractMessagesFromCurrentChat('all');
-      sendResponse(result);
+      syncWhatsAppContacts().finally(() => {
+        const result = extractMessagesFromCurrentChat('all');
+        sendResponse(result);
+      });
       return true;
     }
     if (request.action === 'EXTRACT_NEW_MESSAGES') {
-      const result = extractMessagesFromCurrentChat('new');
-      sendResponse(result);
+      syncWhatsAppContacts().finally(() => {
+        const result = extractMessagesFromCurrentChat('new');
+        sendResponse(result);
+      });
       return true;
     }
     if (request.action === 'EXTRACT_TODAY_MESSAGES') {
-      const result = extractMessagesFromCurrentChat('today');
-      sendResponse(result);
+      syncWhatsAppContacts().finally(() => {
+        const result = extractMessagesFromCurrentChat('today');
+        sendResponse(result);
+      });
       return true;
     }
     if (request.action === 'SCAN_ALL_TODAY_CHATS') {
@@ -152,30 +491,524 @@
     return 'Chat Activo';
   }
 
-  // Helper: Check if string or metadata corresponds to today's date
-  function isDateToday(rawMeta, timestamp, sectionIsToday) {
-    if (sectionIsToday === true) return true;
-    if (sectionIsToday === false) return false;
+  // Helper to extract phone number from open contact info drawer in DOM (outside #side and #main)
+  function getPhoneFromContactDrawer() {
+    try {
+      const candidateTexts = [];
 
-    const cleanMeta = cleanWhatsAppText(rawMeta);
-    if (cleanMeta) {
-      const lower = cleanMeta.toLowerCase();
-      if (lower.includes('hoy') || lower.includes('today') || lower.includes('hoje')) return true;
-      if (lower.includes('ayer') || lower.includes('yesterday') || lower.includes('ontem')) return false;
+      // 1. Search leaf text elements outside #side (left list) and outside #main (chat messages)
+      const allOutside = document.querySelectorAll('body *');
+      for (const el of allOutside) {
+        if (el.closest('#side') || el.closest('#main')) continue;
+        if (el.closest('#wa-message-extractor-panel') || el.closest('#wa-extractor-fab')) continue;
 
-      // Pure time inside [ ] indicates today in WhatsApp Web
-      const inside = (cleanMeta.match(/\[(.*?)\]/) || [])[1] || cleanMeta;
-      if (/^\s*\d{1,2}:\d{2}(\s*[ap]\.?\s*m\.?)?\s*$/i.test(inside)) {
-        return true;
+        if (el.children.length <= 2) {
+          const txt = (el.innerText || el.textContent || '').trim();
+          if (txt && (txt.includes('+') || /^\d[\d\s\-\(\)]{7,}\d$/.test(txt))) {
+            candidateTexts.push(txt);
+          }
+        }
+      }
+
+      // 2. Also check #main header
+      const header = document.querySelector('#main header');
+      if (header) {
+        const headerTexts = header.querySelectorAll('span, div');
+        for (const h of headerTexts) {
+          const t = (h.innerText || '').trim();
+          if (t && t.includes('+')) candidateTexts.push(t);
+        }
+      }
+
+      for (const txt of candidateTexts) {
+        // Matches +57 311 8396385 or +1 (719) 833-9225 etc.
+        const match = txt.match(/\+(\d[\d\s\-\(\)]{6,18}\d)/);
+        if (match) {
+          const d = cleanPhoneNumber(match[1]);
+          if (d.length >= 7 && d.length <= 15 && !isLikelyLid(d)) {
+            return d;
+          }
+        }
+        // Matches formatted number without +: 57 311 8396385
+        if (/^\d{1,4}[\s\-\.]\d{2,4}[\s\-\.]?\d{3,4}[\s\-\.]?\d{3,4}$/.test(txt)) {
+          const d = cleanPhoneNumber(txt);
+          if (d.length >= 7 && d.length <= 15 && !isLikelyLid(d)) {
+            return d;
+          }
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function triggerCloseContactDrawer() {
+    const closeSelectors = [
+      'button[aria-label*="Cerrar"]',
+      'button[aria-label*="Close"]',
+      '[data-testid="btn-closer"]',
+      '[data-testid="x"]',
+      '[data-icon="x"]',
+      'span[data-icon="x"]'
+    ];
+    for (const sel of closeSelectors) {
+      const els = document.querySelectorAll(sel);
+      for (const el of els) {
+        if (!el.closest('#side') && !el.closest('#main') && !el.closest('#wa-message-extractor-panel')) {
+          const btn = el.closest('button') || el;
+          btn.click();
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Register a discovered real phone number across all caches and DOM
+  function registerDiscoveredPhone(contactName, phone, lidDigits = '') {
+    if (!phone || isLikelyLid(phone)) return;
+    const clean = cleanPhoneNumber(phone);
+    if (!clean || clean.length < 7 || clean.length > 15 || isLikelyLid(clean)) return;
+
+    try {
+      document.documentElement.setAttribute('data-wa-active-phone', clean);
+      if (contactName) document.documentElement.setAttribute('data-wa-active-name', contactName);
+    } catch (e) {}
+    window.waActiveChatPhone = clean;
+
+    const info = {
+      phone: clean,
+      name: contactName || '',
+      pushname: '',
+      isSaved: true
+    };
+    contactsCache.byPhone.set(clean, info);
+    if (contactName) {
+      const norm = normalizeContactName(contactName);
+      contactsCache.byName.set(norm, info);
+      contactsCache.byName.set(contactName.toLowerCase(), info);
+      contactsCache.byName.set(contactName, info);
+    }
+    if (lidDigits) {
+      contactsCache.byLid.set(lidDigits, info);
+      contactsCache.byLid.set(lidDigits + '@lid', info);
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.get(['wa_real_phone_cache'], (res) => {
+        const cache = res?.wa_real_phone_cache || {};
+        if (contactName) {
+          cache[normalizeContactName(contactName)] = clean;
+          cache[contactName] = clean;
+        }
+        if (lidDigits) {
+          cache[lidDigits] = clean;
+        }
+        cache[clean] = clean;
+        chrome.storage.local.set({ wa_real_phone_cache: cache });
+      });
+    }
+
+    // Retroactively purge any LIDs in savedChats and update to real verified phone
+    let updated = false;
+    for (const chatKey of Object.keys(savedChats)) {
+      const chat = savedChats[chatKey];
+      if (!chat || !Array.isArray(chat.messages)) continue;
+      chat.messages.forEach(m => {
+        const isTarget = (contactName && (m.chatName === contactName || m.sender === contactName)) ||
+                         (lidDigits && (cleanPhoneNumber(m.numero) === lidDigits || cleanPhoneNumber(m.phone) === lidDigits));
+        if (isTarget) {
+          if (!m.numero || isLikelyLid(m.numero) || m.numero !== clean) {
+            m.numero = clean;
+            m.phone = clean;
+            updated = true;
+          }
+        }
+      });
+    }
+
+    if (updated) {
+      saveToStorage({ wa_saved_chats: savedChats }, () => {
+        updatePanelUI();
+      });
+    }
+  }
+
+  // Programmatically explore the contact in WhatsApp Web to extract real phone number
+  let isExploringContact = false;
+  async function exploreContactForRealPhone(targetChatName, autoClose = false) {
+    if (isExploringContact) return '';
+    isExploringContact = true;
+    try {
+      if (!targetChatName || targetChatName === 'Chat Activo') {
+        targetChatName = getActiveChatName();
+      }
+      const norm = normalizeContactName(targetChatName);
+      if (contactsCache.byName.get(norm)?.phone) {
+        return contactsCache.byName.get(norm).phone;
+      }
+
+      // 1. Check if drawer is already open in DOM
+      let phone = getPhoneFromContactDrawer();
+      if (phone && !isLikelyLid(phone)) {
+        registerDiscoveredPhone(targetChatName, phone);
+        return phone;
+      }
+
+      // 2. Click the conversation header to open drawer
+      const header = document.querySelector('#main header');
+      if (!header) return '';
+
+      const clickable = header.querySelector('[data-testid="conversation-info-header"]') ||
+                        header.querySelector('div[role="button"][tabindex="0"]') ||
+                        header.querySelector('div[role="button"]:has(span[dir="auto"])') ||
+                        header.querySelector('div[role="button"]') ||
+                        header.children[1] ||
+                        header;
+
+      if (clickable) {
+        clickable.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
+        clickable.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        clickable.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+
+        // Wait up to 600ms for drawer to render
+        for (let i = 0; i < 6; i++) {
+          await new Promise(r => setTimeout(r, 100));
+          phone = getPhoneFromContactDrawer();
+          if (phone && !isLikelyLid(phone)) break;
+        }
+
+        if (phone && !isLikelyLid(phone)) {
+          registerDiscoveredPhone(targetChatName, phone);
+        }
+
+        // 3. Auto-close if requested and drawer was opened by us
+        if (autoClose) {
+          triggerCloseContactDrawer();
+        }
+      }
+
+      return phone || '';
+    } catch (err) {
+      return '';
+    } finally {
+      isExploringContact = false;
+    }
+  }
+
+  // Observer for contact drawer: whenever the drawer is open or opens, grab real phone!
+  try {
+    const drawerObserver = new MutationObserver(() => {
+      const phone = getPhoneFromContactDrawer();
+      if (phone && !isLikelyLid(phone)) {
+        const activeName = getActiveChatName();
+        if (activeName && activeName !== 'Chat Activo') {
+          registerDiscoveredPhone(activeName, phone);
+        }
+      }
+    });
+    drawerObserver.observe(document.body, { childList: true, subtree: true });
+  } catch (e) {}
+
+  // Retroactively clean up any LIDs in savedChats
+  function sanitizeSavedChats() {
+    let changed = false;
+    for (const chatKey of Object.keys(savedChats)) {
+      const chat = savedChats[chatKey];
+      if (!chat || !Array.isArray(chat.messages)) continue;
+      chat.messages.forEach(m => {
+        if (isLikelyLid(m.numero) || isLikelyLid(m.phone)) {
+          const norm = normalizeContactName(m.chatName || m.sender || '');
+          const real = contactsCache.byName.get(norm)?.phone ||
+                       contactsCache.byLid.get(cleanPhoneNumber(m.numero))?.phone ||
+                       '';
+          m.numero = (!isLikelyLid(real) && real) ? real : '';
+          m.phone = m.numero;
+          changed = true;
+        }
+      });
+    }
+    if (changed) {
+      saveToStorage({ wa_saved_chats: savedChats });
+    }
+  }
+
+  /**
+   * Helper: Resolve contact details for a chat:
+   * Rule:
+   * 1. Contactos ya agregados: se le pone el nombre del contacto, con su número de teléfono real.
+   * 2. Números no agregados: se le pone el nombre de usuario de WhatsApp, con su número de teléfono.
+   * Los números de teléfono NUNCA pueden ser identificadores internos LID de Meta/WhatsApp.
+   */
+  function resolveChatContactInfo(chatName) {
+    const rawClean = cleanWhatsAppText(chatName);
+    const digitsInTitle = cleanPhoneNumber(rawClean);
+    const isTitlePhone = digitsInTitle.length >= 7 && digitsInTitle.length <= 15 && !isLikelyLid(digitsInTitle) && (/^\+/.test(rawClean) || /^\d[\d\s\-\(\)]+\d$/.test(rawClean));
+
+    let phoneNumber = '';
+    let contactName = '';
+    let pushname = '';
+    let isSavedContact = false;
+
+    // 1. Verificación instantánea vía atributos DOM compartidos con page_bridge.js (Main World)
+    const domActivePhone = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-wa-active-phone') : '';
+    const domActiveName = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-wa-active-name') : '';
+    const domActivePushname = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-wa-active-pushname') : '';
+
+    if (isTitlePhone) {
+      // Número no agregado en agenda
+      phoneNumber = digitsInTitle;
+      isSavedContact = false;
+
+      // Buscar nombre de usuario (~Usuario) en el encabezado
+      const mainHeader = document.querySelector('#main header');
+      if (mainHeader) {
+        const headerText = mainHeader.innerText || '';
+        const tildeMatch = headerText.match(/~([^\n\r]+)/);
+        if (tildeMatch && tildeMatch[1]) {
+          pushname = cleanWhatsAppText(tildeMatch[1].replace(/~/g, ''));
+        }
+      }
+      if (!pushname && domActivePushname) pushname = domActivePushname;
+
+      // Buscar en caché por número
+      const cached = contactsCache.byPhone.get(phoneNumber);
+      if (cached) {
+        if (!pushname && cached.pushname) pushname = cached.pushname;
+        if (cached.isSaved && cached.name && cached.name !== phoneNumber && cached.name !== rawClean) {
+          contactName = cached.name;
+          isSavedContact = true;
+        }
+      }
+    } else {
+      // Contacto ya agregado (nombre de contacto como "Dr. Juan" o "Mamá")
+      contactName = rawClean;
+      isSavedContact = true;
+
+      const activeChatName = getActiveChatName();
+      const isCurrentActive = !chatName || chatName === 'Chat Activo' || chatName === activeChatName ||
+        (domActiveName && (domActiveName === rawClean || normalizeContactName(domActiveName) === normalizeContactName(rawClean)));
+
+      const norm = normalizeContactName(rawClean);
+
+      // A. Buscar en caché verificado por nombre (exacto y normalizado sin acentos)
+      let cached = contactsCache.byName.get(norm) ||
+                   contactsCache.byName.get(rawClean.toLowerCase()) ||
+                   contactsCache.byName.get(rawClean);
+
+      if (!cached && norm) {
+        for (const [key, val] of contactsCache.byName.entries()) {
+          if (key === norm || key.includes(norm) || norm.includes(key)) {
+            if (val && val.phone && !isLikelyLid(val.phone)) {
+              cached = val;
+              break;
+            }
+          }
+        }
+      }
+
+      if (cached && cached.phone && !isLikelyLid(cached.phone)) {
+        phoneNumber = cached.phone;
+        if (cached.pushname) pushname = cached.pushname;
+        if (cached.name) contactName = cached.name;
+      }
+
+      // B. Buscar directamente en el panel lateral / drawer de información de contacto abierto en WhatsApp Web
+      if (!phoneNumber) {
+        const drawerPhone = getPhoneFromContactDrawer();
+        if (drawerPhone && !isLikelyLid(drawerPhone)) {
+          phoneNumber = drawerPhone;
+          registerDiscoveredPhone(rawClean, drawerPhone);
+        }
+      }
+
+      // C. Comprobar si el bridge del DOM tiene el teléfono verificado del chat activo
+      if (!phoneNumber && isCurrentActive && domActivePhone && !isLikelyLid(domActivePhone)) {
+        phoneNumber = cleanPhoneNumber(domActivePhone);
+        if (domActivePushname) pushname = domActivePushname;
+      }
+
+      // D. Comprobar lastActiveBridgeInfo o window.waActiveChatPhone
+      if (!phoneNumber && isCurrentActive) {
+        if (lastActiveBridgeInfo && lastActiveBridgeInfo.phone && !isLikelyLid(lastActiveBridgeInfo.phone)) {
+          phoneNumber = cleanPhoneNumber(lastActiveBridgeInfo.phone);
+          if (lastActiveBridgeInfo.pushname) pushname = lastActiveBridgeInfo.pushname;
+        } else if (window.waActiveChatPhone && !isLikelyLid(window.waActiveChatPhone)) {
+          phoneNumber = cleanPhoneNumber(window.waActiveChatPhone);
+        }
+      }
+
+      // E. Buscar en los mensajes de #main por atributo data-id (@c.us JID o @lid mapeado)
+      if (!phoneNumber) {
+        const main = document.querySelector('#main');
+        if (main) {
+          const msgWithJid = main.querySelector('div[data-id*="@c.us"], div[data-id*="@s.whatsapp.net"]');
+          if (msgWithJid) {
+            const dataId = msgWithJid.getAttribute('data-id') || '';
+            const match = dataId.match(/(\d{7,15})@(c\.us|s\.whatsapp\.net)/i);
+            if (match && match[1] && !isLikelyLid(match[1])) {
+              phoneNumber = match[1];
+            }
+          }
+
+          if (!phoneNumber) {
+            const msgWithLid = main.querySelector('div[data-id*="@lid"]');
+            if (msgWithLid) {
+              const dataId = msgWithLid.getAttribute('data-id') || '';
+              const matchLid = dataId.match(/(\d{8,25})@lid/i);
+              if (matchLid && matchLid[1]) {
+                const cachedLid = contactsCache.byLid.get(matchLid[1]) || contactsCache.byLid.get(matchLid[1] + '@lid');
+                if (cachedLid && cachedLid.phone && !isLikelyLid(cachedLid.phone)) {
+                  phoneNumber = cachedLid.phone;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // F. Buscar en el texto o subtítulo del encabezado si tiene formato de número
+      if (!phoneNumber) {
+        const headerText = document.querySelector('#main header')?.innerText || '';
+        const matchHeader = headerText.match(/(\+?\d[\d\s-]{7,15}\d)/);
+        if (matchHeader) {
+          const d = cleanPhoneNumber(matchHeader[1]);
+          if (d.length >= 7 && d.length <= 15 && !isLikelyLid(d)) {
+            phoneNumber = d;
+          }
+        }
+      }
+
+      // G. Explorar el contacto si está abierto en #main y aún no tenemos el número real
+      if ((!phoneNumber || isLikelyLid(phoneNumber)) && isCurrentActive && typeof document !== 'undefined') {
+        exploreContactForRealPhone(rawClean, true).then(found => {
+          if (found && !isLikelyLid(found)) {
+            registerDiscoveredPhone(rawClean, found);
+          }
+        });
       }
     }
 
-    const cleanTs = cleanWhatsAppText(timestamp).toLowerCase();
-    if (cleanTs.includes('ayer') || cleanTs.includes('yesterday') || cleanTs.includes('ontem') || /\d{1,2}[\/\.-]\d{1,2}/.test(cleanTs)) {
+    if (isLikelyLid(phoneNumber)) {
+      phoneNumber = '';
+    }
+
+    let displayName = '';
+    if (isSavedContact) {
+      displayName = contactName || rawClean;
+    } else {
+      displayName = pushname || (phoneNumber ? `+${phoneNumber}` : rawClean);
+    }
+
+    return {
+      phoneNumber,
+      contactName,
+      pushname,
+      isSavedContact,
+      displayName
+    };
+  }
+
+  /**
+   * Helper: Parse date from data-pre-plain-text (ej: "[10:35, 10/10/2026] Juan: ")
+   * Devuelve true si la fecha es hoy, false si es de otro día, o null si no hay fecha válida.
+   */
+  function isPrePlainTextToday(rawMeta) {
+    if (!rawMeta) return null;
+    const cleanMeta = cleanWhatsAppText(rawMeta);
+    const bracketMatch = cleanMeta.match(/\[(.*?)\]/);
+    if (!bracketMatch) return null;
+    const content = bracketMatch[1].trim();
+
+    // Patrón fecha DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD
+    const dateMatch = content.match(/(\d{1,4})[\/\.-](\d{1,2})[\/\.-](\d{2,4})/);
+    if (dateMatch) {
+      const now = new Date();
+      const todayYear = now.getFullYear();
+      const todayMonth = now.getMonth() + 1;
+      const todayDay = now.getDate();
+
+      let p1 = parseInt(dateMatch[1], 10);
+      let p2 = parseInt(dateMatch[2], 10);
+      let p3 = parseInt(dateMatch[3], 10);
+
+      if (p3 < 100) p3 += 2000;
+      if (p1 < 100 && p3 > 1000) {
+        const isYear = p3 === todayYear;
+        const isDayMonth = (p1 === todayDay && p2 === todayMonth) || (p2 === todayDay && p1 === todayMonth);
+        if (isYear && isDayMonth) return true;
+        return false;
+      } else if (p1 > 1000) {
+        if (p1 === todayYear && p2 === todayMonth && p3 === todayDay) return true;
+        return false;
+      }
+    }
+
+    const lower = content.toLowerCase();
+    if (lower.includes('hoy') || lower.includes('today') || lower.includes('hoje')) return true;
+    if (lower.includes('ayer') || lower.includes('yesterday') || lower.includes('ontem')) return false;
+
+    return null;
+  }
+
+  /**
+   * Helper: Determinar si un separador de fecha de WhatsApp corresponde a hoy
+   */
+  function isDateDividerToday(dividerText) {
+    if (!dividerText) return null;
+    const lower = cleanWhatsAppText(dividerText).toLowerCase();
+
+    if (/\b(hoy|today|hoje)\b/i.test(lower)) return true;
+    if (/\b(ayer|yesterday|ontem)\b/i.test(lower)) return false;
+
+    // Días de la semana pasados (lunes, martes, etc.)
+    if (/\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday|segunda|ter[cç]a|quarta|quinta|sexta)\b/i.test(lower)) {
       return false;
     }
 
-    return true;
+    // Fechas explícitas pasadas (ej: "8 de octubre", "08/10/2026")
+    if (/\d{1,2}\s+de\s+[a-z]+/i.test(lower) || /\d{1,2}[\/\.-]\d{1,2}/.test(lower)) {
+      const now = new Date();
+      const todayDay = now.getDate();
+      const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+      const currentMonthName = monthNames[now.getMonth()];
+      if (lower.includes(String(todayDay)) && lower.includes(currentMonthName)) {
+        return true;
+      }
+      return false;
+    }
+
+    return null;
+  }
+
+  /**
+   * Helper: Verificar estrictamente si el mensaje corresponde a hoy
+   */
+  function isDateToday(rawMeta, timestamp, sectionIsToday) {
+    // 1. Si data-pre-plain-text tiene fecha explícita, es la fuente más precisa
+    const preDate = isPrePlainTextToday(rawMeta);
+    if (preDate === true) return true;
+    if (preDate === false) return false;
+
+    // 2. Si el separador de sección previo es conocido
+    if (sectionIsToday === true) return true;
+    if (sectionIsToday === false) return false;
+
+    // 3. Verificaciones de palabras clave en timestamp
+    const cleanTs = cleanWhatsAppText(timestamp).toLowerCase();
+    if (
+      cleanTs.includes('ayer') ||
+      cleanTs.includes('yesterday') ||
+      cleanTs.includes('ontem') ||
+      /\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(cleanTs) ||
+      /\d{1,2}[\/\.-]\d{1,2}/.test(cleanTs) ||
+      /\d{1,2}\s+de\s+[a-z]+/i.test(cleanTs)
+    ) {
+      return false;
+    }
+
+    // Si es ambiguo sin ninguna confirmación de ser de hoy, no asumir hoy
+    return false;
   }
 
   // Helper: Retrieve all today messages across all saved chats and the global collection
@@ -185,9 +1018,9 @@
 
     if (savedChats['__TODAY_ALL__']?.messages?.length > 0) {
       savedChats['__TODAY_ALL__'].messages.forEach(m => {
-        if (!seen.has(m.id)) {
+        if (m.isToday && !seen.has(m.id)) {
           seen.add(m.id);
-          all.push({ ...m, isToday: true });
+          all.push(m);
         }
       });
     }
@@ -196,11 +1029,9 @@
       if (chatName === '__TODAY_ALL__') return;
       const chatMsgs = savedChats[chatName]?.messages || [];
       chatMsgs.forEach(m => {
-        const ts = (m.timestamp || '').toLowerCase();
-        const isNotYesterday = !ts.includes('ayer') && !ts.includes('yesterday') && !ts.includes('ontem');
-        if ((m.isToday || isNotYesterday) && !seen.has(m.id)) {
+        if (m.isToday && !seen.has(m.id)) {
           seen.add(m.id);
-          all.push({ ...m, chatName: m.chatName || chatName, isToday: true });
+          all.push({ ...m, chatName: m.chatName || chatName });
         }
       });
     });
@@ -244,16 +1075,34 @@
     if (!main) return [];
 
     const chatName = forcedChatName || getActiveChatName() || 'Chat Sin Nombre';
+    const chatContactInfo = resolveChatContactInfo(chatName);
+
     const allRows = main.querySelectorAll('div[data-id], div[role="row"], div.message-in, div.message-out, div[data-testid="msg-container"]');
     if (!allRows || allRows.length === 0) return [];
 
     const previousMessages = savedChats[chatName]?.messages || [];
     const prevIds = new Set(previousMessages.map(m => m.id));
 
+    // Pre-escaneo de separadores de fecha en el chat
+    let hasTodayDivider = false;
+    let hasPastDivider = false;
+    allRows.forEach((el) => {
+      const isBubble = el.classList.contains('message-in') || el.classList.contains('message-out') ||
+        !!el.querySelector('span.selectable-text, div.copyable-text, [data-icon="msg-check"], [data-icon="msg-dblcheck"]');
+      if (!isBubble) {
+        const text = el.innerText || '';
+        const divCheck = isDateDividerToday(text);
+        if (divCheck === true) hasTodayDivider = true;
+        if (divCheck === false) hasPastDivider = true;
+      }
+    });
+
     const extracted = [];
     const seenMsgIds = new Set();
     let foundUnreadSeparator = false;
-    let currentSectionIsToday = null;
+    // Si hay separador "HOY", los mensajes previos a él no son de hoy
+    // Si solo hay separadores pasados ("AYER", días de semana), los mensajes no son de hoy
+    let currentSectionIsToday = hasTodayDivider ? false : (hasPastDivider ? false : null);
 
     allRows.forEach((el) => {
       const rawText = el.innerText || '';
@@ -263,18 +1112,11 @@
       const isMessageBubble = el.classList.contains('message-in') || el.classList.contains('message-out') ||
         !!el.querySelector('span.selectable-text, div.copyable-text, [data-icon="msg-check"], [data-icon="msg-dblcheck"]');
 
-      // Check date dividers ONLY on non-message rows
+      // Comprobar separadores de fecha SOLO en filas que no sean burbujas de mensaje
       if (!isMessageBubble) {
-        if (/\b(hoy|today|hoje)\b/i.test(lowerText)) {
-          currentSectionIsToday = true;
-          return;
-        }
-        if (
-          /\b(ayer|yesterday|ontem)\b/i.test(lowerText) ||
-          /\d{1,2}\s+de\s+[a-z]+/i.test(lowerText) ||
-          /\d{1,2}[\/\.-]\d{1,2}/.test(lowerText)
-        ) {
-          currentSectionIsToday = false;
+        const dividerCheck = isDateDividerToday(textContent);
+        if (dividerCheck !== null) {
+          currentSectionIsToday = dividerCheck;
           return;
         }
       }
@@ -293,12 +1135,6 @@
         el.getAttribute('data-id')?.includes('true_');
 
       const isIncoming = el.classList.contains('message-in') || !isOutgoing;
-
-      let sender = isOutgoing ? 'Tú' : chatName;
-      const senderSpan = el.querySelector('span[dir="auto"][role="button"], span[aria-label]');
-      if (isIncoming && senderSpan && senderSpan.innerText && senderSpan.innerText !== chatName) {
-        sender = cleanWhatsAppText(senderSpan.innerText);
-      }
 
       let timestamp = '';
       let rawMeta = '';
@@ -344,21 +1180,102 @@
       if (!text || text.trim().length === 0) return;
 
       const isToday = isDateToday(rawMeta, timestamp, currentSectionIsToday);
+
+      // RESOLUCIÓN DE NÚMERO Y NOMBRE DE REMITENTE SEGÚN REGLA:
+      // 1. Número de usuario siempre presente
+      // 2. Si no hay número agregado: nombre de usuario de WhatsApp
+      // 3. Contactos ya agregados: nombre del contacto
+      let sender = '';
+      let msgNumero = (!isLikelyLid(chatContactInfo.phoneNumber)) ? chatContactInfo.phoneNumber : '';
+
+      const rowDataId = el.getAttribute('data-id') || el.closest('[data-id]')?.getAttribute('data-id') || '';
+      const matchJid = rowDataId.match(/(\d{7,15})@(c\.us|s\.whatsapp\.net)/i);
+      if (matchJid && matchJid[1] && !isLikelyLid(matchJid[1])) {
+        msgNumero = matchJid[1];
+      }
+
+      if (!msgNumero || isLikelyLid(msgNumero)) {
+        const matchLid = rowDataId.match(/(\d{8,25})@lid/i);
+        if (matchLid && matchLid[1]) {
+          const cachedLid = contactsCache.byLid.get(matchLid[1]) || contactsCache.byLid.get(matchLid[1] + '@lid');
+          if (cachedLid && cachedLid.phone && !isLikelyLid(cachedLid.phone)) {
+            msgNumero = cachedLid.phone;
+          }
+        }
+      }
+
+      if (!msgNumero || isLikelyLid(msgNumero)) {
+        const norm = normalizeContactName(chatName);
+        const cached = contactsCache.byName.get(norm) || contactsCache.byName.get(chatName);
+        if (cached && cached.phone && !isLikelyLid(cached.phone)) {
+          msgNumero = cached.phone;
+        }
+      }
+
+      if (!msgNumero || isLikelyLid(msgNumero)) {
+        const domPhone = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-wa-active-phone') : '';
+        if (domPhone && !isLikelyLid(domPhone)) {
+          msgNumero = cleanPhoneNumber(domPhone);
+        } else if (lastActiveBridgeInfo && lastActiveBridgeInfo.phone && !isLikelyLid(lastActiveBridgeInfo.phone)) {
+          msgNumero = cleanPhoneNumber(lastActiveBridgeInfo.phone);
+        } else if (window.waActiveChatPhone && !isLikelyLid(window.waActiveChatPhone)) {
+          msgNumero = cleanPhoneNumber(window.waActiveChatPhone);
+        }
+      }
+
+      if (!msgNumero || isLikelyLid(msgNumero)) {
+        const drawerPhone = getPhoneFromContactDrawer();
+        if (drawerPhone && !isLikelyLid(drawerPhone)) {
+          msgNumero = drawerPhone;
+          registerDiscoveredPhone(chatName, drawerPhone);
+        }
+      }
+
+      if (isLikelyLid(msgNumero)) {
+        msgNumero = '';
+      }
+
+      if (isOutgoing) {
+        sender = 'Tú';
+      } else {
+        if (chatContactInfo.isSavedContact) {
+          // Contacto ya agregado: se usa el nombre del contacto
+          sender = chatContactInfo.contactName || chatName;
+        } else {
+          // No agregado: se le pone el nombre de usuario
+          let rowPushname = chatContactInfo.pushname;
+          const senderSpan = el.querySelector('span[dir="auto"][role="button"], span[aria-label]');
+          if (senderSpan && senderSpan.innerText) {
+            const spanText = cleanWhatsAppText(senderSpan.innerText);
+            if (spanText && spanText !== chatName && !/^\+?\d[\d\s-]+\d$/.test(spanText)) {
+              rowPushname = spanText.replace(/^~/, '').trim();
+            }
+          }
+          sender = rowPushname || chatContactInfo.displayName || (msgNumero ? `+${msgNumero}` : chatName);
+        }
+      }
+
       const id = `${chatName}_${timestamp}_${sender}_${text.substring(0, 30)}`.replace(/\s+/g, '_');
 
-      // Avoid duplicate row/child hits
+      // Evitar duplicados
       if (seenMsgIds.has(id)) return;
       seenMsgIds.add(id);
 
       const isNew = foundUnreadSeparator || !prevIds.has(id);
 
       if (isNewOnly && !isNew) return;
-      if (isTodayOnly && !isToday) return;
+      if (isTodayOnly && !isToday) return; // FILTRO ESTRICTO DE HOY: descarta ayer o días pasados
 
       extracted.push({
         id,
         chatName,
         sender,
+        senderName: sender,
+        contactName: chatContactInfo.contactName || (chatContactInfo.isSavedContact ? chatName : ''),
+        pushname: chatContactInfo.pushname || '',
+        isSavedContact: chatContactInfo.isSavedContact,
+        numero: msgNumero,
+        phone: msgNumero,
         text,
         timestamp,
         type: isOutgoing ? 'outgoing' : 'incoming',
@@ -427,13 +1344,16 @@
       return { success: false, inProgress: true };
     }
 
+    // Sincronizar libreta de contactos desde IndexedDB primero
+    await syncWhatsAppContacts();
+
     const paneSide = document.querySelector('#pane-side, div[aria-label="Chat list"], div[role="grid"]');
     if (!paneSide) {
       showToast('No se encontró la lista de chats en WhatsApp Web', '⚠️');
       return { success: false, error: 'Chat list not found' };
     }
 
-    // Only select direct chat item containers to prevent duplicate inner rows
+    // Solo seleccionar contenedores de chat directos
     const chatItems = Array.from(paneSide.querySelectorAll('div[role="listitem"], div[role="row"]'));
     if (chatItems.length === 0) {
       showToast('No hay chats visibles en la lista de WhatsApp Web', 'ℹ️');
@@ -453,9 +1373,11 @@
       const textEls = item.querySelectorAll('span, div');
       for (const el of textEls) {
         const txt = cleanWhatsAppText(el.innerText);
+        // Exclusivamente horas del día actual (HH:MM o HH:MM a.m./p.m.)
+        // NO debe contener palabras de ayer, días de la semana, ni fechas numéricas
         if (
           /^(\d{1,2}:\d{2})(\s*[ap]\.?\s*m\.?)?$/i.test(txt) &&
-          !/ayer|yesterday|ontem|\d{1,2}[\/\.-]\d{1,2}/i.test(txt)
+          !/ayer|yesterday|ontem|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}[\/\.-]\d{1,2}/i.test(txt)
         ) {
           isTodayChat = true;
           timeText = txt;
@@ -463,28 +1385,15 @@
         }
       }
 
-      const hasUnread = !!item.querySelector('span[aria-label*="unread"], span[aria-label*="no leído"], span[data-icon="unread-count"]');
-
-      if (isTodayChat || hasUnread) {
+      if (isTodayChat) {
         seenTitles.add(title);
         todayChats.push({ element: item, title, timeText });
       }
     });
 
     if (todayChats.length === 0) {
-      chatItems.slice(0, 6).forEach(item => {
-        const titleEl = item.querySelector('span[title], span[dir="auto"]');
-        const title = titleEl ? cleanWhatsAppText(titleEl.getAttribute('title') || titleEl.innerText) : '';
-        if (title && !seenTitles.has(title)) {
-          seenTitles.add(title);
-          todayChats.push({ element: item, title, timeText: '' });
-        }
-      });
-
-      if (todayChats.length === 0) {
-        showToast('No se detectaron chats de hoy en la lista visible', 'ℹ️');
-        return { success: false, count: 0 };
-      }
+      showToast('No se detectaron chats con mensajes de hoy en la lista visible', 'ℹ️');
+      return { success: true, count: 0, messages: [] };
     }
 
     isScanningAll = true;
@@ -504,7 +1413,7 @@
 
         triggerChatClick(chat.element);
 
-        // Poll up to 1.6s for chat messages to be rendered in #main
+        // Esperar a que rendericen los mensajes de este chat en #main
         for (let wait = 0; wait < 8; wait++) {
           await new Promise(r => setTimeout(r, 200));
           const main = document.querySelector('#main');
@@ -513,30 +1422,12 @@
           }
         }
 
-        let msgs = extractMessagesInternal('today', chat.title);
-
-        // Robust fallback 1: if 'today' filter yielded 0, extract all and filter out yesterday/past dates
-        if (!msgs || msgs.length === 0) {
-          const allMsgs = extractMessagesInternal('all', chat.title);
-          msgs = allMsgs.filter(m => {
-            const ts = (m.timestamp || '').toLowerCase();
-            return !ts.includes('ayer') && !ts.includes('yesterday') && !ts.includes('ontem') && !/\d{1,2}[\/\.-]\d{1,2}/.test(ts);
-          });
-
-          // Robust fallback 2: if all timestamps were strictly rejected, take all visible messages from this active chat
-          if (msgs.length === 0 && allMsgs.length > 0) {
-            msgs = allMsgs;
-          }
-        }
+        // Extraer ÚNICAMENTE mensajes de hoy
+        const msgs = extractMessagesInternal('today', chat.title);
 
         if (msgs && msgs.length > 0) {
-          msgs.forEach(m => {
-            m.chatName = chat.title;
-            m.isToday = true;
-          });
           allAggregatedMessages.push(...msgs);
 
-          // Always ensure savedChats[chat.title] is also populated
           if (!savedChats[chat.title]) {
             savedChats[chat.title] = {
               name: chat.title,
@@ -788,6 +1679,28 @@
         </div>
       </div>
 
+      <!-- AuraSystem Spa Webhook Integration -->
+      <div class="wa-aurasystem-panel-bar" style="padding: 10px 12px; background: #0b0c10; border-top: 1px solid #1f212a; display: flex; flex-direction: column; gap: 6px;">
+        <div class="aura-config-grid">
+          <div class="aura-input-wrapper">
+            <label for="wa-input-aura-business-id" class="aura-mini-label">Id de dueño</label>
+            <input type="text" id="wa-input-aura-business-id" class="aura-mini-input" placeholder="Ej: spa_aura_01" title="ID de dueño / negocio">
+          </div>
+          <div class="aura-input-wrapper">
+            <label for="wa-input-aura-worker-id" class="aura-mini-label">Id de trabajadora</label>
+            <input type="text" id="wa-input-aura-worker-id" class="aura-mini-input" placeholder="Ej: worker_123" title="ID de la trabajadora">
+          </div>
+        </div>
+        <button class="btn btn-aurasystem" id="wa-btn-transfer-aurasystem" title="Transferir mensajes al webhook de AuraSystem Spa">
+          <svg class="aura-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff2d75" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            <circle cx="12" cy="12" r="3.5" stroke="#ff2d75" fill="#ff2d75" fill-opacity="0.25"/>
+          </svg>
+          <span id="wa-txt-transfer-aurasystem">Transferir a AuraSystem</span>
+        </button>
+        <div id="wa-aurasystem-status-hint" style="display:none; font-size:11px; color:#ff2d75; text-align:center; font-weight:500;"></div>
+      </div>
+
       <div class="wa-panel-footer">
         <div style="display:flex; gap:6px;">
           <button class="wa-btn wa-btn-secondary" id="wa-btn-copy-all" title="Copiar todo al portapapeles">📋 Copiar</button>
@@ -803,6 +1716,125 @@
     // Event listeners
     document.querySelector('#wa-btn-close').addEventListener('click', closePanel);
     document.querySelector('#wa-btn-scan-all-today').addEventListener('click', scanAllTodayChats);
+
+    // AuraSystem Webhook Transfer Listener & Inputs
+    const btnAura = document.querySelector('#wa-btn-transfer-aurasystem');
+    const txtAura = document.querySelector('#wa-txt-transfer-aurasystem');
+    const hintAura = document.querySelector('#wa-aurasystem-status-hint');
+    const inputBusinessAura = document.querySelector('#wa-input-aura-business-id');
+    const inputWorkerAura = document.querySelector('#wa-input-aura-worker-id');
+
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage?.local) {
+        chrome.storage.local.get(['aurasystem_settings'], (cfg) => {
+          if (chrome.runtime?.lastError) return;
+          if (inputBusinessAura) inputBusinessAura.value = cfg?.aurasystem_settings?.businessId || '';
+          if (inputWorkerAura) inputWorkerAura.value = cfg?.aurasystem_settings?.workerId || '';
+        });
+      }
+    } catch (e) {
+      // Ignore invalidated extension context
+    }
+
+    const saveWaAuraInputs = () => {
+      try {
+        const bId = inputBusinessAura ? inputBusinessAura.value.trim() : '';
+        const wId = inputWorkerAura ? inputWorkerAura.value.trim() : '';
+        if (typeof auraService !== 'undefined') {
+          auraService.saveConfig({ businessId: bId, workerId: wId }).catch(() => {});
+        }
+      } catch (err) {
+        // Ignore invalidated extension context
+      }
+    };
+    if (inputBusinessAura) inputBusinessAura.addEventListener('input', saveWaAuraInputs);
+    if (inputWorkerAura) inputWorkerAura.addEventListener('input', saveWaAuraInputs);
+
+    if (btnAura) {
+      btnAura.addEventListener('click', async () => {
+        // Send ONLY the messages that are currently listed in the panel UI
+        let messages = getCurrentlyListedMessages();
+        let chatTitle = (currentActiveChat === '__TODAY_ALL__')
+          ? 'Todos los chats de hoy (Global)'
+          : (currentActiveChat || getActiveChatName() || 'Chat Activo');
+
+        if (!messages || messages.length === 0) {
+          const currentChatExtracted = extractMessagesInternal(activeFilter === 'all' ? 'all' : activeFilter);
+          if (currentChatExtracted && currentChatExtracted.length > 0) {
+            updatePanelUI();
+            messages = getCurrentlyListedMessages();
+          }
+        }
+
+        if (!messages || messages.length === 0) {
+          showToast('No hay mensajes enlistados para transferir.', '⚠️');
+          return;
+        }
+
+        const businessId = inputBusinessAura ? inputBusinessAura.value.trim() : '';
+        const workerId = inputWorkerAura ? inputWorkerAura.value.trim() : '';
+
+        // Validación: Requiere al menos uno de los dos IDs (businessId o workerId)
+        if (!businessId && !workerId) {
+          showToast('Ingresa al menos el Id de dueño o el Id de trabajadora', '⚠️');
+          if (hintAura) {
+            hintAura.style.display = 'block';
+            hintAura.style.color = '#ff758c';
+            hintAura.textContent = '⚠️ Ingresa al menos el Id de dueño o el Id de trabajadora.';
+          }
+          if (inputBusinessAura) {
+            inputBusinessAura.focus();
+          }
+          return;
+        }
+
+        btnAura.disabled = true;
+        btnAura.classList.add('is-loading');
+        if (hintAura) {
+          hintAura.style.display = 'block';
+          hintAura.style.color = '#ff2d75';
+          hintAura.textContent = 'Iniciando transferencia a AuraSystem...';
+        }
+
+        try {
+          if (typeof auraService !== 'undefined') {
+            const res = await auraService.transferMessages({
+              chatName: chatTitle,
+              messages,
+              businessId,
+              workerId,
+              onProgress: ({ current, total, percentage, phoneNumber }) => {
+                if (txtAura) txtAura.textContent = `Transfiriendo (${current}/${total})...`;
+                if (hintAura) hintAura.textContent = `${percentage}% completado (${current}/${total})${phoneNumber ? ` • ${phoneNumber}` : ''}`;
+              }
+            });
+
+            if (res && res.success) {
+              if (txtAura) txtAura.textContent = '¡Transferido con Éxito!';
+              showToast(`¡${res.successful} mensajes sincronizados con AuraSystem!`, '🌸');
+              if (hintAura) {
+                hintAura.style.color = '#25D366';
+                hintAura.textContent = `✅ ${res.successful} mensajes transferidos a AuraSystem`;
+              }
+              setTimeout(() => {
+                if (txtAura) txtAura.textContent = 'Transferir a AuraSystem';
+                if (hintAura) hintAura.style.display = 'none';
+              }, 4000);
+            } else {
+              showToast(res?.error || 'Error al transferir a AuraSystem', '❌');
+              if (txtAura) txtAura.textContent = 'Reintentar Transferencia';
+            }
+          } else {
+            showToast('Módulo AuraSystem no disponible', '❌');
+          }
+        } catch (e) {
+          showToast(`Error: ${e.message}`, '❌');
+        } finally {
+          btnAura.disabled = false;
+          btnAura.classList.remove('is-loading');
+        }
+      });
+    }
     document.querySelector('#wa-btn-extract-all').addEventListener('click', () => extractMessagesFromCurrentChat('all'));
     document.querySelector('#wa-btn-extract-today').addEventListener('click', () => extractMessagesFromCurrentChat('today'));
     document.querySelector('#wa-btn-extract-new').addEventListener('click', () => extractMessagesFromCurrentChat('new'));
@@ -927,19 +1959,17 @@
     renderFeed();
   }
 
-  function renderFeed() {
-    const feed = document.querySelector('#wa-message-feed');
-    if (!feed) return;
-
-    let messages = [];
+  // Helper: Get only the messages currently listed in the UI based on active chat and filters
+  function getCurrentlyListedMessages() {
+    let rawMessages = [];
     if (currentActiveChat === '__TODAY_ALL__') {
-      messages = getGlobalTodayMessages();
+      rawMessages = getGlobalTodayMessages();
     } else {
       const activeChat = currentActiveChat || getActiveChatName();
-      messages = savedChats[activeChat]?.messages || [];
+      rawMessages = savedChats[activeChat]?.messages || [];
     }
 
-    let filtered = messages.filter(m => {
+    return rawMessages.filter(m => {
       if (activeFilter === 'new' && !m.isNew) return false;
       if (activeFilter === 'today' && !m.isToday) return false;
       if (activeFilter === 'in' && m.type !== 'incoming') return false;
@@ -953,12 +1983,27 @@
       }
       return true;
     });
+  }
+
+  function renderFeed() {
+    const feed = document.querySelector('#wa-message-feed');
+    if (!feed) return;
+
+    let totalRawMessages = 0;
+    if (currentActiveChat === '__TODAY_ALL__') {
+      totalRawMessages = getGlobalTodayMessages().length;
+    } else {
+      const activeChat = currentActiveChat || getActiveChatName();
+      totalRawMessages = savedChats[activeChat]?.messages?.length || 0;
+    }
+
+    const filtered = getCurrentlyListedMessages();
 
     if (filtered.length === 0) {
       feed.innerHTML = `
         <div class="wa-empty-state">
-          <div class="wa-empty-icon">${messages.length === 0 ? '💬' : '🔍'}</div>
-          <div>${messages.length === 0 ? 'No hay mensajes capturados aquí.' : 'No hay mensajes que coincidan con el filtro.'}</div>
+          <div class="wa-empty-icon">${totalRawMessages === 0 ? '💬' : '🔍'}</div>
+          <div>${totalRawMessages === 0 ? 'No hay mensajes capturados aquí.' : 'No hay mensajes que coincidan con el filtro.'}</div>
           <div style="font-size:11px;">Haz clic en <strong>🌐 Escanear Todos los Chats de Hoy</strong> arriba para capturarlos automáticamente.</div>
         </div>
       `;
@@ -971,11 +2016,24 @@
       card.className = `wa-card ${msg.type === 'outgoing' ? 'outgoing' : 'incoming'} ${msg.isNew ? 'is-new' : ''}`;
       
       const showChatPill = currentActiveChat === '__TODAY_ALL__' && msg.chatName;
+      const rawNum = msg.numero || msg.phone || '';
+      let numDisplay = (!isLikelyLid(rawNum) && cleanPhoneNumber(rawNum).length >= 7) ? cleanPhoneNumber(rawNum) : '';
+      if (!numDisplay) {
+        const norm = normalizeContactName(msg.chatName || msg.sender || '');
+        const cached = contactsCache.byName.get(norm)?.phone ||
+                       contactsCache.byName.get(msg.chatName)?.phone ||
+                       contactsCache.byName.get(msg.sender)?.phone;
+        if (cached && !isLikelyLid(cached)) {
+          numDisplay = cleanPhoneNumber(cached);
+        }
+      }
 
       card.innerHTML = `
         <div class="wa-card-header">
-          <div style="display:flex; align-items:center; gap:6px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
             <span class="wa-sender">${escapeHTML(msg.sender)}</span>
+            ${numDisplay ? `<span class="wa-phone-pill" title="Número de teléfono">📱 +${escapeHTML(numDisplay)}</span>` : ''}
+            ${msg.isSavedContact === true ? '<span class="wa-badge-contact" title="Contacto guardado">👤 Contacto</span>' : (msg.isSavedContact === false ? '<span class="wa-badge-unsaved" title="Número no agregado">🆕 No guardado</span>' : '')}
             ${showChatPill ? `<span class="wa-chat-pill">${escapeHTML(msg.chatName)}</span>` : ''}
           </div>
           <div style="display:flex; align-items:center; gap:5px;">
@@ -991,7 +2049,8 @@
       `;
 
       card.querySelector('.btn-copy-card').addEventListener('click', () => {
-        navigator.clipboard.writeText(`[${msg.timestamp}] ${msg.sender}${msg.chatName ? ` (${msg.chatName})` : ''}: ${msg.text}`);
+        const phoneTxt = numDisplay ? ` (+${numDisplay})` : '';
+        navigator.clipboard.writeText(`[${msg.timestamp}] ${msg.sender}${phoneTxt}${msg.chatName ? ` (${msg.chatName})` : ''}: ${msg.text}`);
         showToast('Mensaje copiado', '📋');
       });
 
@@ -1008,7 +2067,17 @@
       showToast('No hay mensajes para copiar', '⚠️');
       return;
     }
-    const formatted = messages.map(m => `[${m.timestamp}] ${m.sender}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`).join('\n');
+    const formatted = messages.map(m => {
+      const rawNum = m.numero || m.phone;
+      let validNum = (!isLikelyLid(rawNum) && cleanPhoneNumber(rawNum).length >= 7) ? cleanPhoneNumber(rawNum) : '';
+      if (!validNum) {
+        const norm = normalizeContactName(m.chatName || m.sender || '');
+        const cached = contactsCache.byName.get(norm)?.phone;
+        if (cached && !isLikelyLid(cached)) validNum = cleanPhoneNumber(cached);
+      }
+      const phoneTxt = validNum ? ` (+${validNum})` : '';
+      return `[${m.timestamp}] ${m.sender}${phoneTxt}${m.chatName ? ` (${m.chatName})` : ''}: ${m.text}`;
+    }).join('\n');
     navigator.clipboard.writeText(formatted).then(() => {
       showToast(`${messages.length} mensajes copiados al portapapeles`, '📋');
     });
@@ -1021,7 +2090,20 @@
       showToast('No hay datos para exportar', '⚠️');
       return;
     }
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(messages, null, 2));
+    // Clean any LIDs and resolve real phone numbers before JSON export
+    const cleanMessages = messages.map(m => {
+      const copy = { ...m };
+      let validNum = (!isLikelyLid(copy.numero) && cleanPhoneNumber(copy.numero).length >= 7) ? cleanPhoneNumber(copy.numero) : '';
+      if (!validNum) {
+        const norm = normalizeContactName(copy.chatName || copy.sender || '');
+        const cached = contactsCache.byName.get(norm)?.phone;
+        if (cached && !isLikelyLid(cached)) validNum = cleanPhoneNumber(cached);
+      }
+      copy.numero = validNum;
+      copy.phone = validNum;
+      return copy;
+    });
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(cleanMessages, null, 2));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute('href', dataStr);
     dlAnchor.setAttribute('download', `whatsapp_${isGlobal ? 'todos_los_de_hoy' : (currentActiveChat || 'chat').replace(/\s+/g, '_')}_${Date.now()}.json`);
@@ -1038,7 +2120,17 @@
     }
     const title = isGlobal ? 'TODOS LOS CHATS DE HOY (GLOBAL)' : (currentActiveChat || getActiveChatName());
     const formatted = `=== CHATS DE WHATSAPP: ${title} ===\nExportado: ${new Date().toLocaleString()}\nTotal Mensajes: ${messages.length}\n\n` +
-      messages.map(m => `[${m.timestamp}] ${m.sender}${m.chatName ? ` [Chat: ${m.chatName}]` : ''}: ${m.text}`).join('\n');
+      messages.map(m => {
+        const rawNum = m.numero || m.phone;
+        let validNum = (!isLikelyLid(rawNum) && cleanPhoneNumber(rawNum).length >= 7) ? cleanPhoneNumber(rawNum) : '';
+        if (!validNum) {
+          const norm = normalizeContactName(m.chatName || m.sender || '');
+          const cached = contactsCache.byName.get(norm)?.phone;
+          if (cached && !isLikelyLid(cached)) validNum = cleanPhoneNumber(cached);
+        }
+        const phoneTxt = validNum ? ` [Tel: +${validNum}]` : '';
+        return `[${m.timestamp}] ${m.sender}${phoneTxt}${m.chatName ? ` [Chat: ${m.chatName}]` : ''}: ${m.text}`;
+      }).join('\n');
 
     const dataStr = 'data:text/plain;charset=utf-8,' + encodeURIComponent(formatted);
     const dlAnchor = document.createElement('a');
